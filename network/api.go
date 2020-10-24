@@ -78,7 +78,7 @@ func (s *Server) RestAPI() {
 			txQuery = qry
 			if txQuery == "all" || txQuery == "nondatatxs" {
 				numOfTxs = 1000000000
-				
+
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -103,10 +103,6 @@ func (s *Server) RestAPI() {
 		x := 1
 		for rows.Next() {
 			var thisTx transaction.Transaction
-			err = rows.Scan(
-				&thisTx.Time, &thisTx.Type, &thisTx.Hash, &thisTx.Data, &thisTx.Prev,
-				&thisTx.Epoc, &thisTx.Subg, &thisTx.Prnt, &thisTx.Mile, &thisTx.Lead,
-			)
 			err = rows.StructScan(&thisTx)
 			if err != nil {
 				log.Panic(err)
