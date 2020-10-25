@@ -36,8 +36,7 @@ func (s *Server) RestAPI() {
 	methodsCORS := handlers.AllowedMethods(corsMethods)
 
 	// Init API
-	r := mux.NewRouter()
-	api := r.PathPrefix("/api/v1").Subrouter()
+	api := mux.NewRouter().PathPrefix("/api/v1").Subrouter()
 
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Println(util.Brightyellow + "[API] /")
