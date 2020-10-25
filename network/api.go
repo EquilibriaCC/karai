@@ -57,13 +57,21 @@ func (s *Server) RestAPI() {
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]bool{"status": true})
 		if err != nil {
-			log.Println(err.Error())
+			badRequest(w, err)
+			return
 		}
 		_, _ = w.Write(response)
 	})
 
-	// Version
-	//api.HandleFunc("/version", returnVersion).Methods(http.MethodGet)
+	api.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		response, err := json.Marshal(map[string]interface{}{"status": true, "message": "v1"})
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		_, _ = w.Write(response)
+	})
 
 	// Stats
 	// api.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
