@@ -1,7 +1,5 @@
 package util
 
-import "runtime"
-
 var nc = "\033[0m"
 
 var Brightblack = "\033[1;30m"
@@ -24,27 +22,3 @@ var white = "\033[0;37m"
 
 var Rcv = Brightyellow + "[RECV]" + Brightred
 var Send = cyan + "[SEND]" + Brightred
-
-func osCheck() {
-	if runtime.GOOS == "windows" {
-		nc = ""
-
-		Brightblack = ""
-		Brightred = ""
-		Brightgreen = ""
-		Brightyellow = ""
-		Brightpurple = ""
-		Brightmagenta = ""
-		Brightcyan = ""
-		Brightwhite = ""
-
-		black = ""
-		red = ""
-		green = ""
-		yellow = ""
-		purple = ""
-		magenta = ""
-		cyan = ""
-		white = ""
-	}
-}

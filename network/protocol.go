@@ -106,7 +106,7 @@ func (s *Server) LookForNodes() {
 			}
 
 			providers := s.node.ProvidersFor("karai-xeq")
-			//log.Println(strconv.Itoa(len(providers)))
+			log.Println("PROVIDERS", strconv.Itoa(len(providers)))
 			for _, provider := range providers {
 					go s.SendVersion(provider)
 			}
@@ -116,7 +116,7 @@ func (s *Server) LookForNodes() {
 	}
 }
 
-func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
+func (s *Server) NewDataTxFromCore(req transaction.RequestOracleData) {
 	req_string, _ := json.Marshal(req)
 
 	var txPrev string
@@ -135,7 +135,7 @@ func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
 	}
 }
 
-func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
+func (s *Server) NewConsensusTXFromCore(req transaction.RequestConsensus) {
 	req_string, _ := json.Marshal(req)
 
 	var txPrev string
@@ -155,7 +155,7 @@ func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
 
 func (s *Server) CreateContract(asset string, denom string) {
 	var txPrev string
-	contract := transaction.Request_Contract{asset, denom}
+	contract := transaction.RequestContract{asset, denom}
 	json_contract,_ := json.Marshal(contract)
 
 	db, connectErr := s.Prtl.Dat.Connect()
@@ -194,7 +194,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 		checks_out = true
 	}
 
-	var last_consensus transaction.Request_Consensus
+	var last_consensus transaction.RequestConsensus
 	err := json.Unmarshal([]byte(tx_data), &last_consensus)
 	if err != nil {
 		//unable to parse last consensus ? this should never happen
@@ -210,7 +210,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 	}
 
 	switch v := result.(type) {
-	case transaction.Request_Consensus:
+	case transaction.RequestConsensus:
 		isFound := false
 		for _, key := range last_consensus.Data {
 			if key == v.PubKey {
@@ -228,10 +228,10 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 
 		// here v has type T
 		break;
-	case transaction.Request_Oracle_Data:
+	case transaction.RequestOracleData:
 		// here v has type S
 		break;
-	case transaction.Request_Contract:
+	case transaction.RequestContract:
 		break;
 	default:
 		return false;

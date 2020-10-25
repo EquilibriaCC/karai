@@ -143,7 +143,7 @@ func (s *Server) RestAPI() {
 	api.HandleFunc("/new_tx", func(w http.ResponseWriter, r *http.Request) {
 		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
-			var req transaction.Request_Oracle_Data
+			var req transaction.RequestOracleData
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -216,7 +216,7 @@ func (s *Server) RestAPI() {
 	api.HandleFunc("/new_consensus_tx", func(w http.ResponseWriter, r *http.Request) {
 		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
-			var req transaction.Request_Consensus
+			var req transaction.RequestConsensus
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
 				badRequest(w, err)
