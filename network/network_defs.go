@@ -1,42 +1,39 @@
 package network
-import (
-	"github.com/karai/go-karai/database"
-	config "github.com/karai/go-karai/configuration"
-	"github.com/harrisonhesslink/flatend"
-	"github.com/lithdew/kademlia"
-	"github.com/karai/go-karai/transaction"
-	"github.com/gorilla/websocket"
 
+import (
+	"github.com/gorilla/websocket"
+	"github.com/harrisonhesslink/flatend"
+	config "github.com/karai/go-karai/configuration"
+	"github.com/karai/go-karai/database"
+	"github.com/karai/go-karai/transaction"
+	"github.com/lithdew/kademlia"
 )
+
 const (
-	protocol      = "tcp"
 	version       = 1
 	commandLength = 12
 )
 
 var (
-	nodeAddress     string
-	mineAddress     string
-	KnownNodes      = []string{"127.0.0.1:3001"}
-	txesInTransit = [][]byte{}
-	txSize int
+	nodeAddress   string
+	KnownNodes    = []string{"127.0.0.1:3001"}
 )
 
 type Addr struct {
 	AddrList []string
 }
 
-type GOB_TX struct {
-	TX   []byte
+type GobTx struct {
+	TX []byte
 }
 
-type GOB_BATCH_TX struct {
-	Batch [][]byte
+type GobBatchTx struct {
+	Batch     [][]byte
 	TotalSent int
 }
 
 type GetTxes struct {
-	Top_hash string
+	TopHash string
 }
 
 type GetData struct {
@@ -52,28 +49,26 @@ type Inv struct {
 }
 
 type Version struct {
-	Version    int
-	TxSize int
-	AddrFrom   string
+	Version  int
+	TxSize   int
+	AddrFrom string
 }
 
 type NewPeer struct {
 	AddrFrom string
-	NewPeer string
+	NewPeer  string
 }
 
-type Server struct { 
-	Prtl *Protocol
-	cf *config.Config
-	node *flatend.Node
-	pl *PeerList
-	ExternalIP string
+type Server struct {
+	Protocol     *Protocol
+	cf           *config.Config
+	Node         *flatend.Node
+	PeerList     *PeerList
+	ExternalIP   string
 	ExternalPort int
-	Sockets []*websocket.Conn
-
-
-	sync bool
-	tx_need int
+	Sockets      []*websocket.Conn
+	sync         bool
+	txNeed       int
 }
 
 type Protocol struct {
@@ -81,21 +76,20 @@ type Protocol struct {
 }
 
 type Peer struct {
-	ID *kademlia.ID
+	ID       *kademlia.ID
 	Provider *flatend.Provider
 }
 
 type PeerList struct {
 	Peers []Peer
-
-	Count int 
+	Count int
 }
 
 type ArrayTX struct {
-	Txes []transaction.Transaction`json:txes`
+	Txes []transaction.Transaction `json:"txes"`
 }
 
 type ErrorJson struct {
-	Message string`json:message`
-	Error bool `json:is_error`
+	Message string `json:"message"`
+	Error   bool   `json:"is_error"`
 }

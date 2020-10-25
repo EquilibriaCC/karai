@@ -35,11 +35,11 @@ func (s *Server) RestAPI() {
 	originsCORS := handlers.AllowedOrigins(corsOrigins)
 	methodsCORS := handlers.AllowedMethods(corsMethods)
 
-	// Init API
-	api := mux.NewRouter().PathPrefix("/api/v1").Subrouter()
+	r := mux.NewRouter()
+	api := r.PathPrefix("/api/v1").Subrouter()
+	api.Use(loggingMiddleware)
 
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(util.Brightyellow + "[API] /")
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]bool{"status": true})
 		if err != nil {
@@ -54,9 +54,22 @@ func (s *Server) RestAPI() {
 	})
 
 	api.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(util.Brightyellow + "[API] /version")
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]interface{}{"status": true, "message": "v1"})
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		_, err = w.Write(response)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+	})
+
+	api.HandleFunc("/apihits", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		response, err := json.Marshal(count)
 		if err != nil {
 			badRequest(w, err)
 			return
@@ -74,7 +87,6 @@ func (s *Server) RestAPI() {
 	// }).Methods(http.MethodGet)
 
 	api.HandleFunc("/transactions/{type}/{txs}", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(util.Brightyellow + "[API] /transactions/{type}/{txs}")
 		var txQuery string
 		qry := mux.Vars(r)["txs"]
 		numOfTxs, err := strconv.Atoi(qry)
@@ -93,7 +105,7 @@ func (s *Server) RestAPI() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		db, err := s.Prtl.Dat.Connect()
+		db, err := s.Protocol.Dat.Connect()
 		if err != nil {
 			badRequest(w, err)
 			return
@@ -113,7 +125,7 @@ func (s *Server) RestAPI() {
 		}
 
 		var transactions []transaction.Transaction
-		rows, _ := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + queryExtension + order)
+		rows, _ := db.Queryx("SELECT * FROM " + s.Protocol.Dat.Cf.GetTableName() + queryExtension + order)
 		defer rows.Close()
 		x := 1
 		for rows.Next() {
@@ -141,7 +153,6 @@ func (s *Server) RestAPI() {
 	}).Methods("GET")
 
 	api.HandleFunc("/new_tx", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
 			var req transaction.RequestOracleData
 			err := json.NewDecoder(r.Body).Decode(&req)
@@ -154,22 +165,21 @@ func (s *Server) RestAPI() {
 				go s.NewDataTxFromCore(req)
 			}
 		}
-		r.Body.Close()
+		_ = r.Body.Close()
 	}).Methods("POST")
 
 	api.HandleFunc("/get_contracts", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
 
-			db, connectErr := s.Prtl.Dat.Connect()
+			db, connectErr := s.Protocol.Dat.Connect()
 			defer db.Close()
 			util.Handle("Error creating a DB connection: ", connectErr)
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			transactions := []transaction.Transaction{}
+			var transactions []transaction.Transaction
 
-			rows, err := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
+			rows, err := db.Queryx("SELECT * FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
 			if err != nil {
 				panic(err)
 			}
@@ -247,8 +257,9 @@ func (s *Server) RestAPI() {
 
 	// Serve via HTTP
 	log.Println("TX API listening on [::]:4203")
-	http.ListenAndServe(":4203", handlers.CORS(headersCORS, originsCORS, methodsCORS)(api))
+	_ = http.ListenAndServe(":4203", handlers.CORS(headersCORS, originsCORS, methodsCORS)(api))
 }
+
 
 func badRequest(w http.ResponseWriter, err error) {
 	res, _ := json.Marshal(map[string]interface{}{"status": false, "message": err.Error()})

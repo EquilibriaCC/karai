@@ -8,13 +8,13 @@ import (
 )
 
 func CmdToBytes(cmd string) []byte {
-	var bytes [commandLength]byte
+	var _bytes [commandLength]byte
 
 	for i, c := range cmd {
-		bytes[i] = byte(c)
+		_bytes[i] = byte(c)
 	}
 
-	return bytes[:]
+	return _bytes[:]
 }
 
 func BytesToCmd(bytes []byte) string {
@@ -29,10 +29,6 @@ func BytesToCmd(bytes []byte) string {
 	return fmt.Sprintf("%s", cmd)
 }
 
-func ExtractCmd(request []byte) []byte {
-	return request[:commandLength]
-}
-
 func GobEncode(data interface{}) []byte {
 	var buff bytes.Buffer
 
@@ -43,23 +39,4 @@ func GobEncode(data interface{}) []byte {
 	}
 
 	return buff.Bytes()
-}
-
-func NodeIsKnown(addr string) bool {
-	for _, node := range KnownNodes {
-		if node == addr {
-			return true
-		}
-	}
-
-	return false
-}
-
-func stringInSlice(a string, list []string) bool {
-    for _, b := range list {
-        if b == a {
-            return true
-        }
-    }
-    return false
 }

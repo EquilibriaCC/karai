@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"github.com/karai/go-karai/network"
 	"github.com/karai/go-karai/util"
 	"log"
@@ -11,7 +12,7 @@ import (
 )
 
 // returns to listening to input.
-func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
+func inputHandler(s *network.Server) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -19,13 +20,24 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 		text = strings.TrimSpace(text)
 		if strings.Compare("help", text) == 0 {
 		//	menu()
+		} else if strings.Compare("stats", text) == 0 {
+			var serv string
+			for k := range s.Node.Services {
+				serv = k
+			}
+			fmt.Println("STATS",
+				"\nDAG SIZE:", s.Protocol.Dat.GetDAGSize(),
+				"\n# OF PEERS:", s.PeerList.Count,
+				"\nNODE ADDRESS:", s.ExternalIP + s.Node.PublicAddr,
+				"\nAPI ADDRESS", s.Protocol.Dat.Cf.DbPort,
+				"\nSERVICES", serv)
 		} else if strings.Compare("?", text) == 0 {
 			//menu()
 		} else if strings.Compare("peer", text) == 0 {
 		//	fmt.Printf(brightcyan + "Peer ID: ")
 		//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
 		} else if strings.Compare("cleardb", text) == 0 {
-			if s.Prtl.Dat.TruncateTable() {
+			if s.Protocol.Dat.TruncateTable() {
 				log.Println(util.Brightwhite + "Cleared Database")
 				continue
 			}
@@ -35,7 +47,7 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 		} else if strings.Compare("license", text) == 0 {
 		//	printLicense()
 		} else if strings.Compare("dag", text) == 0 {
-			count := s.Prtl.Dat.GetDAGSize()
+			count := s.Protocol.Dat.GetDAGSize()
 			log.Println(util.Brightwhite + "Txes: " + strconv.Itoa(count))
 		} else if strings.Compare("a", text) == 0 {
 			// // start := time.Now()

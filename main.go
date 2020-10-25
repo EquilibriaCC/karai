@@ -10,6 +10,6 @@ func main() {
 	c := config.Config_Init()
 	flags(&c)
 	var s network.Server
-	go network.Protocol_Init(&c, &s)
+	go network.ProtocolInit(&c, &s)
 	inputHandler(&s)
 }
