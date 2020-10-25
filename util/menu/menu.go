@@ -1,4 +1,4 @@
-package main
+package menu
 
 import (
 	"bufio"
@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// returns to listening to input.
-func inputHandler(s *network.Server) {
+// returns to listening to menu.
+func InputHandler(s *network.Server) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -26,22 +26,27 @@ func inputHandler(s *network.Server) {
 				serv = k
 			}
 			fmt.Println(
-				util.Brightgreen + "STATS ================",
-				util.Brightgreen + "\nDAG SIZE:     " + util.Brightwhite, s.Protocol.Dat.GetDAGSize(),
-				util.Brightgreen + "\n# OF PEERS:   " + util.Brightwhite, s.PeerList.Count,
-				util.Brightgreen + "\nNODE ADDRESS: " + util.Brightwhite, s.ExternalIP+s.Node.PublicAddr,
-				util.Brightgreen + "\nAPI ADDRESS:  " + util.Brightwhite, s.Protocol.Dat.Cf.DbPort,
-				util.Brightgreen + "\nSERVICES:     " + util.Brightwhite, serv,
-				util.Brightgreen + "\nSYNC STATUS:  " + util.Brightwhite, s.Sync)
+				util.Brightgreen+"STATS ================",
+				util.Brightgreen+"\nDAG SIZE:     "+util.Brightwhite, s.Protocol.Dat.GetDAGSize(),
+				util.Brightgreen+"\n# OF PEERS:   "+util.Brightwhite, s.PeerList.Count,
+				util.Brightgreen+"\nNODE ADDRESS: "+util.Brightwhite, s.ExternalIP+s.Node.PublicAddr,
+				util.Brightgreen+"\nAPI ADDRESS:  "+util.Brightwhite, s.Protocol.Dat.Cf.DbPort,
+				util.Brightgreen+"\nSERVICES:     "+util.Brightwhite, serv,
+				util.Brightgreen+"\nSYNC STATUS:  "+util.Brightwhite, s.Sync)
 		} else if strings.Compare("?", text) == 0 {
 			//menu()
 		} else if strings.Compare("peer", text) == 0 {
 			//	fmt.Printf(brightcyan + "Peer ID: ")
 			//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
 		} else if strings.Compare("cleardb", text) == 0 {
-			if s.Protocol.Dat.TruncateTable() {
-				log.Println(util.Brightwhite + "Cleared Database")
-				continue
+			fmt.Print("Are you sure you want to clear the database?(y/n): ")
+			input := bufio.NewScanner(os.Stdin)
+			input.Scan()
+			if strings.ToLower(input.Text()) == "y" {
+				if s.Protocol.Dat.TruncateTable() {
+					log.Println(util.Brightwhite + "Cleared Database")
+					continue
+				}
 			}
 			log.Println(util.Brightred + "Failed to clear DB")
 		} else if strings.Compare("version", text) == 0 {
@@ -77,7 +82,7 @@ func inputHandler(s *network.Server) {
 			// generatePointer()
 		} else if strings.Compare("quit", text) == 0 {
 			// menuExit()
-		} else if strings.Compare("close", text) == 0 {
+		} else if strings.Compare("exit", text) == 0 {
 			// menuExit()
 		} else if strings.Compare("nodes", text) == 0 {
 			// nodes := "[ "

@@ -3,18 +3,18 @@ package network
 import (
 	// "encoding/hex"
 	"log"
+	"encoding/json"
+	"github.com/glendc/go-external-ip"
+	"github.com/harrisonhesslink/flatend"
 	//"github.com/karai/go-karai/database"
 	config "github.com/karai/go-karai/configuration"
 	"github.com/karai/go-karai/database"
-	"github.com/harrisonhesslink/flatend"
-	"strconv"
-	"github.com/glendc/go-external-ip"
 	"github.com/karai/go-karai/transaction"
 	"github.com/karai/go-karai/util"
-	"io/ioutil"
-	"time"
 	"github.com/lithdew/kademlia"
-	"encoding/json"
+	"io/ioutil"
+	"strconv"
+	"time"
 	//"github.com/gorilla/websocket"
 
 )
@@ -36,12 +36,13 @@ func ProtocolInit(c *config.Config, s *Server) {
 
 	go s.RestAPI()
 
-  	consensus := externalip.DefaultConsensus(nil, nil)
-    // Get your IP,
-    // which is never <nil> when err is <nil>.
-    ip, err := consensus.ExternalIP()
-    if err != nil {
-		log.Panic(ip)
+	consensus := externalip.DefaultConsensus(nil, nil)
+	// Get your IP,
+	// which is never <nil> when err is <nil>.
+	ip, err := consensus.ExternalIP()
+	if err != nil {
+		log.Println(ip)
+		return
 	}
 	s.ExternalIP = ip.String()
 	s.Node = &flatend.Node{
@@ -62,13 +63,12 @@ func ProtocolInit(c *config.Config, s *Server) {
 	defer s.Node.Shutdown()
 
 	err = s.Node.Start(s.ExternalIP)
+	if err != nil {
+		log.Println("Unable to connect")
+	}
 
 	if s.ExternalIP != "167.172.156.118:4201" {
 		go s.Node.Probe("167.172.156.118:4201")
-	}
-
-	if err != nil {
-		log.Println("Unable to connect")
 	}
 
 	go s.LookForNodes()
@@ -84,10 +84,10 @@ func (s *Server) HandleCall(stream *flatend.Stream) {
 	go s.HandleConnection(req, nil)
 }
 
-func (s *Server) GetProviderFromID(id  *kademlia.ID) *flatend.Provider {
+func (s *Server) GetProviderFromID(id *kademlia.ID) *flatend.Provider {
 	providers := s.Node.ProvidersFor("karai-xeq")
 	for _, provider := range providers {
-		if provider.GetID().Pub.String() == id.Pub.String(){
+		if provider.GetID().Pub.String() == id.Pub.String() {
 			return provider
 		}
 	}
@@ -107,16 +107,20 @@ func (s *Server) LookForNodes() {
 
 			providers := s.Node.ProvidersFor("karai-xeq")
 			for _, provider := range providers {
-					go s.SendVersion(provider)
+				go s.SendVersion(provider)
 			}
 		}
 
-		time.Sleep(1 * time.Minute)
+		time.Sleep(time.Minute)
 	}
 }
 
 func (s *Server) NewDataTxFromCore(req transaction.RequestOracleData) {
-	reqString, _ := json.Marshal(req)
+	reqString, err := json.Marshal(req)
+	if err != nil {
+		log.Println("ERROR NewDataTxFromCore: Invalid req")
+		return
+	}
 
 	var txPrev string
 
@@ -124,8 +128,8 @@ func (s *Server) NewDataTxFromCore(req transaction.RequestOracleData) {
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
-	
+	_ = db.QueryRow("SELECT tx_hash FROM "+s.Protocol.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
+
 	newTx := transaction.CreateTransaction("2", txPrev, reqString, []string{}, []string{})
 
 	if !s.Protocol.Dat.HaveTx(newTx.Hash) {
@@ -135,7 +139,11 @@ func (s *Server) NewDataTxFromCore(req transaction.RequestOracleData) {
 }
 
 func (s *Server) NewConsensusTXFromCore(req transaction.RequestConsensus) {
-	reqString, _ := json.Marshal(req)
+	reqString, err := json.Marshal(req)
+	if err != nil {
+		log.Println("ERROR NewDataTxFromCore: Invalid req")
+		return
+	}
 
 	var txPrev string
 
@@ -158,7 +166,7 @@ func (s *Server) NewConsensusTXFromCore(req transaction.RequestConsensus) {
 func (s *Server) CreateContract(asset string, denom string) {
 	var txPrev string
 	contract := transaction.RequestContract{Asset: asset, Denom: denom}
-	jsonContract,_ := json.Marshal(contract)
+	jsonContract, _ := json.Marshal(contract)
 
 	db, err := s.Protocol.Dat.Connect()
 	if err != nil {
@@ -174,7 +182,7 @@ func (s *Server) CreateContract(asset string, denom string) {
 		go s.Protocol.Dat.CommitDBTx(tx)
 		go s.BroadCastTX(tx)
 	}
-	log.Println("Created Contract " + tx.Hash[:8]+ ": " + asset + "/" + denom)
+	log.Println("Created Contract " + tx.Hash[:8] + ": " + asset + "/" + denom)
 }
 
 /*
@@ -185,28 +193,27 @@ CheckNode checks if a Node should be able to put data on the contract takes a Tr
 func (s *Server) CheckNode(tx transaction.Transaction) bool {
 
 	checksOut := false
-	var hash string
-	var txData string
+	var hash, txData string
 
-	db, connectErr := s.Protocol.Dat.Connect()
+	db, err := s.Protocol.Dat.Connect()
+	if err != nil {
+		log.Println("ERROR CheckNode: Creating a DB connection: ", err.Error())
+		return false
+	}
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash, tx_data FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &txData)
+	_ = db.QueryRow("SELECT tx_hash, tx_data FROM "+s.Protocol.Dat.Cf.GetTableName()+" WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &txData)
 
 	if hash != "" {
 		checksOut = true
 	}
 
 	var lastConsensus transaction.RequestConsensus
-	err := json.Unmarshal([]byte(txData), &lastConsensus)
+	err = json.Unmarshal([]byte(txData), &lastConsensus)
 	if err != nil {
-		//unable to parse last consensus ? this should never happen
-		log.Println("Failed to Parse Last Consensus TX on Cehck")
+		log.Println("Failed to Parse Last Consensus TX on check")
 		return false
 	}
-
-	//get interface for checks [Request_Consensus, Request_Oracle_Data, Request_Contract]
 
 	result := tx.ParseInterface()
 	if result == nil {
@@ -225,18 +232,15 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 		if !isFound {
 			return false
 		}
-		// here v has type T
-		break;
-	case transaction.RequestOracleData:
-		// here v has type S
-		break;
-	case transaction.RequestContract:
-		break;
+		break
+	//case transaction.RequestOracleData:
+	//	// here v has type S
+	//	break
+	//case transaction.RequestContract:
+	//	break
 	default:
-		return false;
+		return false
 	}
 
 	return checksOut
 }
-
-

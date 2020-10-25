@@ -27,22 +27,22 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 	dec := gob.NewDecoder(&buff)
 	err := dec.Decode(&payload)
 	if err != nil {
-		log.Panic(err)
+		log.Println("ERROR HandleGetTxs: Failed to decode payload", err)
+		return
 	}
 	log.Println(util.Rcv + " [" + command + "] Get Tx from: " + payload.TopHash)
 	lastHash := payload.TopHash
 
-	if s.Protocol.Dat.HaveTx(lastHash) {
-		return
-
-	} else {
-		db, connectErr := s.Protocol.Dat.Connect()
+	if !s.Protocol.Dat.HaveTx(lastHash) {
+		db, err := s.Protocol.Dat.Connect()
+		if err != nil {
+			log.Println("ERROR HandleGetTxes: creating a DB connection: ", err)
+			return
+		}
 		defer db.Close()
-		util.Handle("Error creating a DB connection: ", connectErr)
 
 		var transactions []transaction.Transaction
 		hit := false
-		//Grab all first txes on epoc 
 		rows, err := db.Queryx("SELECT * FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time ASC")
 		if err != nil {
 			panic(err)
@@ -52,12 +52,11 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 			var thisTx transaction.Transaction
 			err = rows.StructScan(&thisTx)
 			if err != nil {
-				// handle this error
-				log.Panic(err)
+				log.Println("ERROR HandleGetTxes (1): Failed to get db data: ", err)
+				return
 			}
 
 			if lastHash == thisTx.Hash {
-				log.Println("hit")
 				hit = true
 			}
 
@@ -73,8 +72,8 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 					var thisTx2 transaction.Transaction
 					err = row2.StructScan(&thisTx2)
 					if err != nil {
-						// handle this error
-						log.Panic(err)
+						log.Println("ERROR HandleGetTxes (2): Failed to get db data: ", err)
+						return
 					}
 					transactions = append(transactions, thisTx2)
 					//loop through to find oracle data
@@ -86,8 +85,8 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 						var thisTx3 transaction.Transaction
 						err = row3.StructScan(&thisTx3)
 						if err != nil {
-							// handle this error
-							log.Panic(err)
+							log.Println("ERROR HandleGetTxes (3): Failed to get db data: ", err)
+							return
 						}
 						transactions = append(transactions, thisTx3)
 						row3.Close()
@@ -108,19 +107,20 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 		// get any error encountered during iteration
 		err = rows.Err()
 		if err != nil {
-			log.Panic(err)
+			log.Println("ERROR HandleGetTxes:", err)
+			return
 		}
 		var txes [][]byte
 		for i, tx := range transactions {
-			
+
 			txes = append(txes, tx.Serialize())
 			if (i % 100) == 0 {
 				data := GobBatchTx{txes, len(transactions)}
 				payload := GobEncode(data)
 				request := append(CmdToBytes("batchtx"), payload...)
-		
+
 				go s.SendData(ctx, request)
-				txes =  nil
+				txes = nil
 			}
 		}
 	}
@@ -133,10 +133,10 @@ func (s *Server) HandleGetData(ctx *flatend.Context, request []byte) {
 	var payload GetData
 
 	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-	err := dec.Decode(&payload)
+	err := gob.NewDecoder(&buff).Decode(&payload)
 	if err != nil {
-		log.Panic(err)
+		log.Println("ERROR HandleGetData:", err)
+		return
 	}
 
 	log.Println(util.Rcv + " [" + command + "] Data Request from: " + ctx.ID.Pub.String())
@@ -150,14 +150,13 @@ func (s *Server) HandleBatchTx(request []byte) {
 		var payload GobBatchTx
 
 		buff.Write(request[commandLength:])
-		dec := gob.NewDecoder(&buff)
-		err := dec.Decode(&payload)
+		err := gob.NewDecoder(&buff).Decode(&payload)
 		if err != nil {
-			log.Panic(err)
+			log.Println("ERROR HandleBatchTx:", err)
+			return
 		}
 
 		for _, tx_ := range payload.Batch {
-
 			tx := transaction.DeserializeTransaction(tx_)
 			if s.Protocol.Dat.HaveTx(tx.Prev) {
 				if !s.Protocol.Dat.HaveTx(tx.Hash) {
@@ -165,8 +164,7 @@ func (s *Server) HandleBatchTx(request []byte) {
 				}
 			}
 		}
-		percentageFloat := float64(payload.TotalSent) / float64(s.txNeed) * 100
-		percentageString := fmt.Sprintf("%.2f", percentageFloat)
+		percentageString := fmt.Sprintf("%.2f", float64(payload.TotalSent) / float64(s.txNeed) * 100)
 		log.Println(util.Rcv + " [" + command + "] Received Transactions. Sync %:" + percentageString + "[" + strconv.Itoa(payload.TotalSent) + "/" + strconv.Itoa(s.txNeed) + "]")
 		if payload.TotalSent == s.txNeed {
 			s.txNeed = 0
@@ -182,10 +180,10 @@ func (s *Server) HandleTx(request []byte) {
 	var payload GobTx
 
 	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-	err := dec.Decode(&payload)
+	err := gob.NewDecoder(&buff).Decode(&payload)
 	if err != nil {
-		log.Panic(err)
+		log.Println("ERROR HandleTx:", err)
+		return
 	}
 	txData := payload.TX
 	tx := transaction.DeserializeTransaction(txData)
@@ -212,7 +210,6 @@ func (s *Server) HandleVersion(ctx *flatend.Context, request []byte) {
 	}
 
 	if payload.TxSize > s.Protocol.Dat.GetDAGSize() {
-		//lock in the first Node
 		if s.Sync == false {
 			go s.SendGetTxes(ctx)
 			s.Sync = true
@@ -239,4 +236,3 @@ func (s *Server) HandleConnection(req []byte, ctx *flatend.Context) {
 	}
 
 }
-

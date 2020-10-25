@@ -9,16 +9,6 @@ import (
 	"github.com/lithdew/kademlia"
 )
 
-const (
-	version       = 1
-	commandLength = 12
-)
-
-var (
-	nodeAddress   string
-	KnownNodes    = []string{"127.0.0.1:3001"}
-)
-
 type Addr struct {
 	AddrList []string
 }
@@ -60,15 +50,15 @@ type NewPeer struct {
 }
 
 type Server struct {
-	Protocol     *Protocol
-	cf           *config.Config
-	Node         *flatend.Node
-	PeerList     *PeerList
-	ExternalIP   string
-	ExternalPort int
-	Sockets      []*websocket.Conn
-	Sync         bool
-	txNeed       int
+	Protocol      *Protocol
+	cf            *config.Config
+	Node          *flatend.Node
+	PeerList      *PeerList
+	ExternalIP    string
+	ExternalPort  int
+	Sockets       []*websocket.Conn
+	Sync          bool
+	txNeed        int
 }
 
 type Protocol struct {

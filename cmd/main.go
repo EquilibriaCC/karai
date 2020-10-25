@@ -3,13 +3,14 @@ package main
 import (
 	config "github.com/karai/go-karai/configuration"
 	"github.com/karai/go-karai/network"
+	"github.com/karai/go-karai/util/flags"
+	"github.com/karai/go-karai/util/menu"
 )
 
-// Hello Karai
 func main() {
-	c := config.Config_Init()
-	flags(&c)
+	c := config.InitConfig()
+	flags.Flags(&c)
 	var s network.Server
 	go network.ProtocolInit(&c, &s)
-	inputHandler(&s)
+	menu.InputHandler(&s)
 }

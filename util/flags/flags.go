@@ -1,10 +1,10 @@
-package main
+package flags
 import (
 	"flag"
 	config "github.com/karai/go-karai/configuration"
 )
 
-func flags(c *config.Config) {
+func Flags(c *config.Config) {
 	apiport := flag.Int("apiport", 4200, "Port to run Karai Coordinator API on.")
 	wantclean := flag.Bool("clean", false, "Clear all peer certs")
 	dir := flag.String("dir", "./config", "Change the dir of all duh fyles")
