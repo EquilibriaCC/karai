@@ -2,29 +2,19 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"github.com/karai/go-karai/network"
+	"github.com/karai/go-karai/util"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// inputHandler This is a basic input loop that listens for
-// a few words that correspond to functions in the app. When
-// a command isn't understood, it displays the help menu and
 // returns to listening to input.
 func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 	reader := bufio.NewReader(os.Stdin)
 
-	//fmt.Printf("\n\n%v%v%v\n", white+"Type '", brightgreen+"menu", white+"' to view a list of commands")
 	for {
-		// if isCoordinator {
-		fmt.Print("#> " + "\n")
-		// }
-		// if !isCoordinator {
-		// 	fmt.Print(brightgreen + "$> " + nc)
-		// }
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSpace(text)
 		if strings.Compare("help", text) == 0 {
@@ -34,15 +24,19 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 		} else if strings.Compare("peer", text) == 0 {
 		//	fmt.Printf(brightcyan + "Peer ID: ")
 		//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
-		} else if strings.Compare("menu", text) == 0 {
-			//menu()
+		} else if strings.Compare("cleardb", text) == 0 {
+			if s.Prtl.Dat.TruncateTable() {
+				log.Println(util.Brightwhite + "Cleared Database")
+				continue
+			}
+			log.Println(util.Brightred + "Failed to clear DB")
 		} else if strings.Compare("version", text) == 0 {
 			//menuVersion()
 		} else if strings.Compare("license", text) == 0 {
 		//	printLicense()
 		} else if strings.Compare("dag", text) == 0 {
 			count := s.Prtl.Dat.GetDAGSize()
-			log.Println("Txes: " + strconv.Itoa(count))
+			log.Println(util.Brightwhite + "Txes: " + strconv.Itoa(count))
 		} else if strings.Compare("a", text) == 0 {
 			// // start := time.Now()
 			// // txint := 50
