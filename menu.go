@@ -19,23 +19,25 @@ func inputHandler(s *network.Server) {
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSpace(text)
 		if strings.Compare("help", text) == 0 {
-		//	menu()
+			//	menu()
 		} else if strings.Compare("stats", text) == 0 {
 			var serv string
 			for k := range s.Node.Services {
 				serv = k
 			}
-			fmt.Println("STATS",
-				"\nDAG SIZE:", s.Protocol.Dat.GetDAGSize(),
-				"\n# OF PEERS:", s.PeerList.Count,
-				"\nNODE ADDRESS:", s.ExternalIP + s.Node.PublicAddr,
-				"\nAPI ADDRESS", s.Protocol.Dat.Cf.DbPort,
-				"\nSERVICES", serv)
+			fmt.Println(
+				util.Brightgreen + "STATS ================",
+				util.Brightgreen + "\nDAG SIZE:     " + util.Brightwhite, s.Protocol.Dat.GetDAGSize(),
+				util.Brightgreen + "\n# OF PEERS:   " + util.Brightwhite, s.PeerList.Count,
+				util.Brightgreen + "\nNODE ADDRESS: " + util.Brightwhite, s.ExternalIP+s.Node.PublicAddr,
+				util.Brightgreen + "\nAPI ADDRESS:  " + util.Brightwhite, s.Protocol.Dat.Cf.DbPort,
+				util.Brightgreen + "\nSERVICES:     " + util.Brightwhite, serv,
+				util.Brightgreen + "\nSYNC STATUS:  " + util.Brightwhite, s.Sync)
 		} else if strings.Compare("?", text) == 0 {
 			//menu()
 		} else if strings.Compare("peer", text) == 0 {
-		//	fmt.Printf(brightcyan + "Peer ID: ")
-		//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
+			//	fmt.Printf(brightcyan + "Peer ID: ")
+			//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
 		} else if strings.Compare("cleardb", text) == 0 {
 			if s.Protocol.Dat.TruncateTable() {
 				log.Println(util.Brightwhite + "Cleared Database")
@@ -45,7 +47,7 @@ func inputHandler(s *network.Server) {
 		} else if strings.Compare("version", text) == 0 {
 			//menuVersion()
 		} else if strings.Compare("license", text) == 0 {
-		//	printLicense()
+			//	printLicense()
 		} else if strings.Compare("dag", text) == 0 {
 			count := s.Protocol.Dat.GetDAGSize()
 			log.Println(util.Brightwhite + "Txes: " + strconv.Itoa(count))
@@ -90,9 +92,9 @@ func inputHandler(s *network.Server) {
 			if args[1] == "XHV" || args[1] == "XEQ" || args[1] == "LOKI" || args[1] == "ETH" || args[1] == "DOGE" {
 				if args[2] == "BTC" {
 					go s.CreateContract(args[1], args[2])
-					} else {
-						log.Println("Pair Not Supported! BTC")
-					}
+				} else {
+					log.Println("Pair Not Supported! BTC")
+				}
 
 			} else {
 				log.Println("Pair Not Supported! XEQ, XHV, LOKI, ETH, DOGE")

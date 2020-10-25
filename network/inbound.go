@@ -143,7 +143,7 @@ func (s *Server) HandleGetData(ctx *flatend.Context, request []byte) {
 }
 
 func (s *Server) HandleBatchTx(request []byte) {
-	if s.sync == false {
+	if s.Sync == false {
 		command := BytesToCmd(request[:commandLength])
 
 		var buff bytes.Buffer
@@ -170,7 +170,7 @@ func (s *Server) HandleBatchTx(request []byte) {
 		log.Println(util.Rcv + " [" + command + "] Received Transactions. Sync %:" + percentageString + "[" + strconv.Itoa(payload.TotalSent) + "/" + strconv.Itoa(s.txNeed) + "]")
 		if payload.TotalSent == s.txNeed {
 			s.txNeed = 0
-			s.sync = false
+			s.Sync = false
 		}
 	}
 }
@@ -213,9 +213,9 @@ func (s *Server) HandleVersion(ctx *flatend.Context, request []byte) {
 
 	if payload.TxSize > s.Protocol.Dat.GetDAGSize() {
 		//lock in the first Node
-		if s.sync == false {
+		if s.Sync == false {
 			go s.SendGetTxes(ctx)
-			s.sync = true
+			s.Sync = true
 		}
 	}
 

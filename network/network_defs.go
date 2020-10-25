@@ -67,7 +67,7 @@ type Server struct {
 	ExternalIP   string
 	ExternalPort int
 	Sockets      []*websocket.Conn
-	sync         bool
+	Sync         bool
 	txNeed       int
 }
 
