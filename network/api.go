@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
 	"github.com/karai/go-karai/transaction"
 	"github.com/karai/go-karai/util"
 	"net/http"
@@ -15,12 +14,6 @@ import (
 	"log"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
-// restAPI() This is the main API that is activated when isCoord == true
 func (s *Server) RestAPI() {
 
 	// CORS
@@ -34,16 +27,9 @@ func (s *Server) RestAPI() {
 		"Referrer-Policy",
 		"X-Requested-With"}
 
-	corsOrigins := []string{
-		"*",
-		"127.0.0.1"}
+	corsOrigins := []string{"*", "127.0.0.1"}
 
-	corsMethods := []string{
-		"GET",
-		"HEAD",
-		"POST",
-		"PUT",
-		"OPTIONS"}
+	corsMethods := []string{"GET", "HEAD", "POST", "PUT", "OPTIONS"}
 
 	headersCORS := handlers.AllowedHeaders(corsAllowedHeaders)
 	originsCORS := handlers.AllowedOrigins(corsOrigins)
@@ -54,23 +40,33 @@ func (s *Server) RestAPI() {
 	api := r.PathPrefix("/api/v1").Subrouter()
 
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /")
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]bool{"status": true})
 		if err != nil {
 			badRequest(w, err)
 			return
 		}
-		_, _ = w.Write(response)
+		_, err = w.Write(response)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
 	})
 
 	api.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /version")
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]interface{}{"status": true, "message": "v1"})
 		if err != nil {
 			badRequest(w, err)
 			return
 		}
-		_, _ = w.Write(response)
+		_, err = w.Write(response)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
 	})
 
 	// Stats
@@ -79,6 +75,7 @@ func (s *Server) RestAPI() {
 	// }).Methods(http.MethodGet)
 
 	api.HandleFunc("/transactions/{type}/{txs}", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /transactions/{type}/{txs}")
 		var txQuery string
 		qry := mux.Vars(r)["txs"]
 		numOfTxs, err := strconv.Atoi(qry)
@@ -132,13 +129,21 @@ func (s *Server) RestAPI() {
 			}
 			x++
 		}
-		txs, err := json.Marshal(transactions)
-		_, _ = w.Write(txs)
+		response, err := json.Marshal(transactions)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		_, err = w.Write(response)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
 	}).Methods("GET")
 
 	api.HandleFunc("/new_tx", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
-
 			var req transaction.Request_Oracle_Data
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
@@ -146,10 +151,7 @@ func (s *Server) RestAPI() {
 				return
 			}
 
-			log.Println("We are data boy")
-			log.Println(req)
-
-			if (req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && req.Data != "" && req.Height != "" && req.Source != "" && req.Epoc != "") {
+			if req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && req.Data != "" && req.Height != "" && req.Source != "" && req.Epoc != "" {
 				go s.NewDataTxFromCore(req)
 			}
 		}
@@ -157,6 +159,7 @@ func (s *Server) RestAPI() {
 	}).Methods("POST")
 
 	api.HandleFunc("/get_contracts", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
 
 			db, connectErr := s.Prtl.Dat.Connect()
@@ -165,7 +168,6 @@ func (s *Server) RestAPI() {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			// reportRequest("transactions/"+hash, w, r)
 			transactions := []transaction.Transaction{}
 
 			rows, err := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
@@ -178,68 +180,75 @@ func (s *Server) RestAPI() {
 				err = rows.StructScan(&thisTx)
 				if err != nil {
 					// handle this error
-					log.Panic(err)
+					log.Println(err)
 				}
 				transactions = append(transactions, thisTx)
 			}
 			// get any error encountered during iteration
 			err = rows.Err()
 			if err != nil {
-				log.Panic(err)
+				log.Println(err)
+				badRequest(w, err)
 			}
 
-			json, _ := json.Marshal(ArrayTX{transactions})
-			w.Write(json)
+			response, err := json.Marshal(ArrayTX{transactions})
+			if err != nil {
+				log.Println(err.Error())
+				badRequest(w, err)
+			}
+			_, err = w.Write(response)
+			if err != nil {
+				badRequest(w, err)
+				return
+			}
 		} else {
 			errorMSG := ErrorJson{"Not Done Syncing", false}
 			errorJson, _ := json.Marshal(errorMSG)
 
-			w.Write(errorJson)
+			_, err := w.Write(errorJson)
+			if err != nil {
+				badRequest(w, err)
+				return
+			}
 		}
 
 	}).Methods("GET")
 
 	api.HandleFunc("/new_consensus_tx", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(util.Brightyellow + "[API] /new_tx")
 		if s.sync == false {
 			var req transaction.Request_Consensus
-			// Try to decode the request body into the struct. If there is an error,
-			// respond to the client with the error message and a 400 status code.
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				badRequest(w, err)
 				return
 			}
 			log.Println("We are consensus man")
-
-			if (req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && len(req.Data) > 0 && req.Height != "") {
+			if req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && len(req.Data) > 0 && req.Height != "" {
 				go s.NewConsensusTXFromCore(req)
 			}
 		}
-		r.Body.Close()
+		response, err := json.Marshal(map[string]bool{"status": true})
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		err = r.Body.Close()
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		_, err = w.Write(response)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+
 	}).Methods("POST")
 
 	// Serve via HTTP
 	log.Println("TX API listening on [::]:4203")
 	http.ListenAndServe(":4203", handlers.CORS(headersCORS, originsCORS, methodsCORS)(api))
-}
-
-func (s *Server) reader(conn *websocket.Conn) {
-	for {
-		// read in a message
-		messageType, p, err := conn.ReadMessage()
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		// print out that message for clarity
-		log.Println(string(p))
-
-		if err := conn.WriteMessage(messageType, p); err != nil {
-			log.Println(err)
-			return
-		}
-
-	}
 }
 
 func badRequest(w http.ResponseWriter, err error) {
