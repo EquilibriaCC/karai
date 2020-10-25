@@ -81,9 +81,7 @@ func (s *Server) RestAPI() {
 
 		_type := mux.Vars(r)["type"]
 		if _type != "asc" && _type != "desc" && _type != "contract" {
-			res, _ := json.Marshal(map[string]bool{"status": false})
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(res)
+			badRequest(w, err)
 			return
 		}
 
@@ -93,9 +91,7 @@ func (s *Server) RestAPI() {
 
 		db, err := s.Prtl.Dat.Connect()
 		if err != nil {
-			res, _ := json.Marshal(map[string]bool{"status": false})
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(res)
+			badRequest(w, err)
 			return
 		}
 		defer db.Close()
@@ -136,7 +132,7 @@ func (s *Server) RestAPI() {
 		var req transaction.Request_Data_TX
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
 		log.Println("We are data boy")
@@ -186,7 +182,7 @@ func (s *Server) RestAPI() {
 		// respond to the client with the error message and a 400 status code.
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
 
@@ -217,4 +213,11 @@ func (s *Server) reader(conn *websocket.Conn) {
 		}
 
 	}
+}
+
+func badRequest(w http.ResponseWriter, err error) {
+	res, _ := json.Marshal(map[string]interface{}{"status": false, "message": err.Error()})
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write(res)
+	return
 }
