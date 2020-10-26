@@ -88,6 +88,7 @@ func (s *Server) GetProviderFromID(id *kademlia.ID) *flatend.Provider {
 	providers := s.Node.ProvidersFor("karai-xeq")
 	for _, provider := range providers {
 		if provider.GetID().Pub.String() == id.Pub.String() {
+			log.Println(provider)
 			return provider
 		}
 	}

@@ -83,10 +83,8 @@ func (s *Server)SendGetTxes(ctx *flatend.Context) {
 	util.Handle("Error creating a DB connection: ", connectErr)
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
-
 	payload := GobEncode(GetTxes{txPrev})
 	request := append(CmdToBytes("gettxes"), payload...)
-
 	go s.SendData(ctx, request)
 	log.Println(util.Send + " [GTXS] Requesting Transactions starting from: " + txPrev)
 }
