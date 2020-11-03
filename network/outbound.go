@@ -55,7 +55,7 @@ func (s *Server) BroadCastData(data []byte) {
 	for _, provider := range providers {
 		_, err := provider.Push([]string{"karai-xeq"}, nil, ioutil.NopCloser(bytes.NewReader(data)))
 		if err != nil {
-			logger.Error_log(fmt.Sprintf("Unable to broadcast to %s: %s\n", provider.Addr(), err))
+			logger.Error(fmt.Sprintf("Unable to broadcast to %s: %s\n", provider.Addr(), err))
 		}
 	}
 }
@@ -81,7 +81,7 @@ func (s *Server)SendGetTxes(ctx *flatend.Context, fill bool, contracts map[strin
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	logger.Error_log(fmt.Sprintf(" Error creating a DB connection: %s", connectErr))
+	logger.Error(fmt.Sprintf(" Error creating a DB connection: %s", connectErr))
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 	payload := GobEncode(GetTxes{txPrev, fill, contracts})

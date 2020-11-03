@@ -68,7 +68,7 @@ func Protocol_Init(c *config.Config, s *Server) {
 	}
 
 	if err != nil {
-		logger.Error_log(" [PROTOCOLINIT] Unable to connect to node")
+		logger.Error(" [PROTOCOLINIT] Unable to connect to node")
 	}
 
 	go s.LookForNodes()
@@ -79,7 +79,7 @@ func Protocol_Init(c *config.Config, s *Server) {
 func (s *Server) HandleCall(stream *flatend.Stream) {
 	req, err := ioutil.ReadAll(stream.Reader)
 	if err != nil {
-		logger.Error_log(" [HANDLECALL] " + err.Error())
+		logger.Error(" [HANDLECALL] " + err.Error())
 		log.Panic(err)
 	}
 	go s.HandleConnection(req, nil)
@@ -124,7 +124,7 @@ func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	logger.Error_log(" [NEWDATATXFROMCORE] Error creating a DB connection " + connectErr.Error())
+	logger.Error(" [NEWDATATXFROMCORE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
 	
@@ -143,7 +143,7 @@ func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	logger.Error_log(" [NEWCONSENSUSTXFROMCORE] Error creating a DB connection " + connectErr.Error())
+	logger.Error(" [NEWCONSENSUSTXFROMCORE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
@@ -161,7 +161,7 @@ func (s *Server) CreateContract(asset string, denom string) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	logger.Error_log(" [CREATECONTRACT] Error creating a DB connection " + connectErr.Error())
+	logger.Error(" [CREATECONTRACT] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
@@ -187,7 +187,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	logger.Error_log(" [CHECKNODE] Error creating a DB connection " + connectErr.Error())
+	logger.Error(" [CHECKNODE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash, tx_data FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &tx_data)
 
@@ -199,7 +199,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 	err := json.Unmarshal([]byte(tx_data), &last_consensus)
 	if err != nil {
 		//unable to parse last consensus ? this should never happen
-		logger.Warning_log(" Failed to parse last consensus TX on check")
+		logger.Warning(" Failed to parse last consensus TX on check")
 		return false
 	}
 

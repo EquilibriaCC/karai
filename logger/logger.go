@@ -1,6 +1,9 @@
 package logger
 
-import "log"
+import (
+	config "github.com/karai/go-karai/configuration"
+	"log"
+)
 
 var Brightblack = "\033[1;30m"
 var Brightred = "\033[1;31m"
@@ -20,29 +23,35 @@ var cyan = "\033[0;36m"
 var white = "\033[0;37m"
 
 func Receive(msg string) {
-	log.Println(Brightyellow + "[RECEIVE]" + white)
+	if config.InfoLogging {
+		log.Println(Brightgreen + "[INFO]" + Brightyellow + " [RECEIVE]" + white + msg)
+	}
 }
 
 func Send(msg string) {
-	log.Println(cyan + "[SEND]" + white)
-}
-
-func Success_log(msg string) {
-	log.Println(Brightgreen + "[SUCCESS]" + msg + white)
+	if config.InfoLogging {
+		log.Println(Brightgreen + "[INFO]" + cyan + " [SEND]" + white + msg)
+	}
 }
 
 func Info(msg string) {
-	log.Println(Brightgreen + "[INFO]" + msg + white)
+	if config.InfoLogging {
+		log.Println(Brightgreen + "[INFO]" + white + msg + white)
+	}
 }
 
-func Error_log(msg string) {
-	log.Println(Brightred + "[ERROR]" + white + msg + white)
+func Error(msg string) {
+	if config.ErrorLogging {
+		log.Println(Brightred + "[ERROR]" + white + msg + white)
+	}
 }
 
-func Warning_log(msg string) {
-	log.Println(Brightyellow + "[WARNING]" + white + msg + white)
+func Warning(msg string) {
+	if config.WarningLogging {
+		log.Println(Brightyellow + "[WARNING]" + white + msg + white)
+	}
 }
 
-func Success_log_array(msg string) {
-	log.Print(Brightgreen + msg + white)
-}
+//func Success_log_array(msg string) {
+//	log.Print(Brightgreen + msg + white)
+//}

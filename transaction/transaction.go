@@ -29,7 +29,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			logger.Warning_log(" Unable to parse tx data")
+			logger.Warning(" Unable to parse tx data")
 			return nil
 		}
 
@@ -38,7 +38,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		var tx_data Request_Oracle_Data
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			logger.Warning_log(" Unable to parse tx data")
+			logger.Warning(" Unable to parse tx data")
 			return nil
 		}
 
@@ -47,7 +47,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		var tx_data Request_Contract
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			logger.Warning_log(" Unable to parse tx data")
+			logger.Warning(" Unable to parse tx data")
 			return nil
 		}
 
@@ -82,7 +82,7 @@ func DeserializeTransaction(data []byte) Transaction {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	err := decoder.Decode(&transaction)
 	if err != nil {
-		logger.Warning_log(" Failed to deserialize tx")
+		logger.Warning(" Failed to deserialize tx")
 	}
 	return transaction
 }

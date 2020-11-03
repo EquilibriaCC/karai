@@ -8,6 +8,8 @@ import (
 	"os"
 )
 
+var ErrorLogging, WarningLogging, InfoLogging, APILogging bool
+
 type Config struct {
 	AppName           string `json:"app_name"`
 	AppDev            string `json:"app_dev"`
@@ -39,6 +41,10 @@ type Config struct {
 	TableName         string `json:"table_name"`
 	Lport             int    `json:"listen_port"`
 	WantsClean        bool   `json:"wants_clean"`
+	InfoLogging       bool   `json:"info_logging"`
+	WarningLogging    bool   `json:"warning_logging"`
+	ErrorLogging      bool   `json:"error_logging"`
+	ApiLogging        bool   `json:api_logging`
 }
 
 // Attribution constants
@@ -140,6 +146,11 @@ func Config_Init() Config {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	ErrorLogging = con.ErrorLogging
+	WarningLogging = con.WarningLogging
+	InfoLogging = con.InfoLogging
+	APILogging = con.ApiLogging
 
 	return con
 }
