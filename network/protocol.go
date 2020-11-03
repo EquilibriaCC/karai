@@ -1,20 +1,20 @@
 package network
 
 import (
+	"github.com/karai/go-karai/logger"
 	// "encoding/hex"
 	"log"
+	"encoding/json"
+	"github.com/glendc/go-external-ip"
+	"github.com/harrisonhesslink/flatend"
 	//"github.com/karai/go-karai/database"
 	config "github.com/karai/go-karai/configuration"
 	"github.com/karai/go-karai/database"
-	"github.com/harrisonhesslink/flatend"
-	"strconv"
-	"github.com/glendc/go-external-ip"
 	"github.com/karai/go-karai/transaction"
-	"github.com/karai/go-karai/util"
-	"io/ioutil"
-	"time"
 	"github.com/lithdew/kademlia"
-	"encoding/json"
+	"io/ioutil"
+	"strconv"
+	"time"
 	//"github.com/gorilla/websocket"
 
 )
@@ -68,7 +68,7 @@ func Protocol_Init(c *config.Config, s *Server) {
 	}
 
 	if err != nil {
-		log.Println("Unable to connect")
+		logger.Error_log(" [PROTOCOLINIT] Unable to connect to node")
 	}
 
 	go s.LookForNodes()
@@ -79,6 +79,7 @@ func Protocol_Init(c *config.Config, s *Server) {
 func (s *Server) HandleCall(stream *flatend.Stream) {
 	req, err := ioutil.ReadAll(stream.Reader)
 	if err != nil {
+		logger.Error_log(" [HANDLECALL] " + err.Error())
 		log.Panic(err)
 	}
 	go s.HandleConnection(req, nil)
@@ -106,7 +107,7 @@ func (s *Server) LookForNodes() {
 			}
 
 			providers := s.node.ProvidersFor("karai-xeq")
-			//log.Println(strconv.Itoa(len(providers)))
+			logger.Info(" " + strconv.Itoa(len(providers)))
 			for _, provider := range providers {
 					go s.SendVersion(provider)
 			}
@@ -123,7 +124,7 @@ func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
+	logger.Error_log(" [NEWDATATXFROMCORE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
 	
@@ -142,7 +143,7 @@ func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
+	logger.Error_log(" [NEWCONSENSUSTXFROMCORE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
@@ -160,7 +161,7 @@ func (s *Server) CreateContract(asset string, denom string) {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
+	logger.Error_log(" [CREATECONTRACT] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
@@ -170,7 +171,7 @@ func (s *Server) CreateContract(asset string, denom string) {
 		go s.Prtl.Dat.CommitDBTx(tx) 
 		go s.BroadCastTX(tx)
 	}
-	log.Println("Created Contract " + tx.Hash[:8]+ ": " + asset + "/" + denom)
+	logger.Info(" Created Contract " + tx.Hash[:8]+ ": " + asset + "/" + denom)
 }
 
 /*
@@ -186,7 +187,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
+	logger.Error_log(" [CHECKNODE] Error creating a DB connection " + connectErr.Error())
 
 	_ = db.QueryRow("SELECT tx_hash, tx_data FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &tx_data)
 
@@ -198,7 +199,7 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 	err := json.Unmarshal([]byte(tx_data), &last_consensus)
 	if err != nil {
 		//unable to parse last consensus ? this should never happen
-		log.Println("Failed to Parse Last Consensus TX on Cehck")
+		logger.Warning_log(" Failed to parse last consensus TX on check")
 		return false
 	}
 

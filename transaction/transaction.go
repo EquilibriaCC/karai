@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/karai/go-karai/logger"
 	"github.com/karai/go-karai/util"
 	"golang.org/x/crypto/sha3"
 	"log"
@@ -28,7 +29,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			log.Println("Unable to parse tx data")
+			logger.Warning_log(" Unable to parse tx data")
 			return nil
 		}
 
@@ -37,7 +38,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		var tx_data Request_Oracle_Data
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			log.Println("Unable to parse tx data")
+			logger.Warning_log(" Unable to parse tx data")
 			return nil
 		}
 
@@ -46,7 +47,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		var tx_data Request_Contract
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
-			log.Println("Unable to parse tx data")
+			logger.Warning_log(" Unable to parse tx data")
 			return nil
 		}
 
@@ -81,7 +82,7 @@ func DeserializeTransaction(data []byte) Transaction {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	err := decoder.Decode(&transaction)
 	if err != nil {
-		log.Panic(err)
+		logger.Warning_log(" Failed to deserialize tx")
 	}
 	return transaction
 }
@@ -135,7 +136,7 @@ func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc 
 		newTx.Epoc = "0"
 		newTx.Mile = true
 		newTx.Lead = true
-		log.Println("[SELF] New Transaction: " + newTx.Hash)
+		logger.Info(" [SELF] New Transaction: " + newTx.Hash)
 		return newTx
 	} else if newTx.Type == "3" {
 		parsePayload := json.Valid(data)
