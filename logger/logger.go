@@ -19,16 +19,24 @@ var magenta = "\033[0;35m"
 var cyan = "\033[0;36m"
 var white = "\033[0;37m"
 
+func Receive(msg string) {
+	log.Println(Brightyellow + "[RECV]" + white)
+}
+
+func Send(msg string) {
+	log.Println(cyan + "[SEND]" + white)
+}
+
 func Success_log(msg string) {
-	log.Println(Brightgreen + msg + white)
+	log.Println(Brightgreen + "[SUCCESS]" + msg + white)
 }
 
 func Error_log(msg string) {
-	log.Println(Brightred + msg + white)
+	log.Println(Brightred + "[ERROR]" + white + msg + white)
 }
 
 func Warning_log(msg string) {
-	log.Println(Brightyellow + msg + white)
+	log.Println(Brightyellow + "[WARNING]" + white + msg + white)
 }
 
 func Success_log_array(msg string) {
