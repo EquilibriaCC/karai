@@ -5,14 +5,28 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	"github.com/karai/go-karai/transaction"
 	"github.com/karai/go-karai/util"
-	_ "github.com/lib/pq"
-	"log"
+	config "github.com/karai/go-karai/configuration"
 	"strconv"
-	"time"
+	"log"
 )
+
+type Database struct {
+	Cf *config.Config
+	thisSubgraph          string 
+	thisSubgraphShortName string 
+	poolInterval          int  
+	txCount               int   
+}
+
+// Graph is a collection of transactions
+type Graph struct {
+	Transactions []transaction.Transaction `json:"transactions"`
+}
 
 // connect will create an active DB connection
 func (d *Database) Connect() (*sqlx.DB, error) {
@@ -37,22 +51,6 @@ func (d *Database) CreateTables() {
 	q := "CREATE TABLE IF NOT EXISTS " + d.Cf.GetTableName() + "(tx_time CHAR(19) NOT NULL, tx_type CHAR(1) NOT NULL, tx_hash CHAR(128) NOT NULL, tx_data TEXT NOT NULL, tx_prev CHAR(128) NOT NULL, tx_epoc TEXT NOT NULL, tx_subg CHAR(128) NOT NULL, tx_prnt CHAR(128), tx_mile BOOLEAN NOT NULL,tx_lead BOOLEAN NOT NULL);"
 	tx.MustExec(q)
 	tx.Commit()
-
-}
-
-func (d *Database) TruncateTable() bool {
-	db, connectErr := d.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-
-	tx := db.MustBegin()
-	q := "TRUNCATE TABLE " + d.Cf.GetTableName()
-	tx.MustExec(q)
-	err := tx.Commit()
-	if err != nil {
-		return false
-	}
-	return true
 }
 
 

@@ -1,6 +1,6 @@
 package transaction
 
-type RequestOracleData struct {
+type Request_Oracle_Data struct {
 	Hash      string `json:"hash"`
 	PubKey    string `json:"pubkey"`
 	Signature string `json:"signature"`
@@ -11,7 +11,7 @@ type RequestOracleData struct {
 	Epoc      string `json:"epoc"`
 }
 
-type RequestConsensus struct {
+type Request_Consensus struct {
 	Hash      string   `json:"hash"`
 	PubKey    string   `json:"pubkey"`
 	Signature string   `json:"signature"`
@@ -20,6 +20,7 @@ type RequestConsensus struct {
 	Height    string   `json:"height"`
 }
 
+// Transaction This is the structure of the transaction
 type Transaction struct {
 	Time string `json:"time" db:"tx_time"`
 	Type string `json:"type" db:"tx_type"`
@@ -33,7 +34,8 @@ type Transaction struct {
 	Lead bool   `json:"lead" db:"tx_lead"`
 }
 
-type RequestContract struct {
-	Asset string `json:"asset"`
-	Denom string `json:"denom"`
+type Request_Contract struct {
+	Asset string`json:asset`
+	Denom string`json:denom`
 }
+

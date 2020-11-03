@@ -1,8 +1,6 @@
-package util
+package logger
 
-import "runtime"
-
-var nc = "\033[0m"
+import "log"
 
 var Brightblack = "\033[1;30m"
 var Brightred = "\033[1;31m"
@@ -12,7 +10,6 @@ var Brightpurple = "\033[1;34m"
 var Brightmagenta = "\033[1;35m"
 var Brightcyan = "\033[1;36m"
 var Brightwhite = "\033[1;37m"
-
 var black = "\033[0;30m"
 var red = "\033[0;31m"
 var green = "\033[0;32m"
@@ -22,29 +19,18 @@ var magenta = "\033[0;35m"
 var cyan = "\033[0;36m"
 var white = "\033[0;37m"
 
-var Rcv = Brightyellow + "[RECV]" + Brightred
-var Send = cyan + "[SEND]" + Brightred
+func Success_log(msg string) {
+	log.Println(Brightgreen + msg + white)
+}
 
-func osCheck() {
-	if runtime.GOOS == "windows" {
-		nc = ""
+func Error_log(msg string) {
+	log.Println(Brightred + msg + white)
+}
 
-		Brightblack = ""
-		Brightred = ""
-		Brightgreen = ""
-		Brightyellow = ""
-		Brightpurple = ""
-		Brightmagenta = ""
-		Brightcyan = ""
-		Brightwhite = ""
+func Warning_log(msg string) {
+	log.Println(Brightyellow + msg + white)
+}
 
-		black = ""
-		red = ""
-		green = ""
-		yellow = ""
-		purple = ""
-		magenta = ""
-		cyan = ""
-		white = ""
-	}
+func Success_log_array(msg string) {
+	log.Print(Brightgreen + msg + white)
 }

@@ -24,7 +24,7 @@ func (tx *Transaction) Serialize() []byte {
 
 func (tx *Transaction) ParseInterface() interface{} {
 	if tx.Type == "1" {
-		var tx_data RequestConsensus
+		var tx_data Request_Consensus
 
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
@@ -34,7 +34,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 
 		return tx_data
 	} else if tx.Type == "2" {
-		var tx_data RequestOracleData
+		var tx_data Request_Oracle_Data
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
 			log.Println("Unable to parse tx data")
@@ -43,7 +43,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 
 		return tx_data
 	} else if tx.Type == "3" {
-		var tx_data RequestContract
+		var tx_data Request_Contract
 		err := json.Unmarshal([]byte(tx.Data),&tx_data)
 		if err != nil {
 			log.Println("Unable to parse tx data")
@@ -55,7 +55,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 	return nil
 }
 
-func CheckConsensusTx(consensus *RequestConsensus) bool {
+func CheckConsensusTx(consensus *Request_Consensus) bool {
 	// isFound := false
 	// for _, key := range last_consensus.Data {
 	// 	if key == v.PubKey {
@@ -99,7 +99,7 @@ func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc 
 			newTx.Data = string(data)
 		}
 
-		rct := RequestOracleData{}
+		rct := Request_Oracle_Data{}
 		_ = json.Unmarshal(data, &rct)
 
 		if last_epoc_tx == "" {

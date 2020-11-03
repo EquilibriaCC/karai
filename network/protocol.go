@@ -3,49 +3,48 @@ package network
 import (
 	// "encoding/hex"
 	"log"
-	"encoding/json"
-	"github.com/glendc/go-external-ip"
-	"github.com/harrisonhesslink/flatend"
 	//"github.com/karai/go-karai/database"
 	config "github.com/karai/go-karai/configuration"
 	"github.com/karai/go-karai/database"
+	"github.com/harrisonhesslink/flatend"
+	"strconv"
+	"github.com/glendc/go-external-ip"
 	"github.com/karai/go-karai/transaction"
 	"github.com/karai/go-karai/util"
-	"github.com/lithdew/kademlia"
 	"io/ioutil"
-	"strconv"
 	"time"
+	"github.com/lithdew/kademlia"
+	"encoding/json"
 	//"github.com/gorilla/websocket"
 
 )
 
-func ProtocolInit(c *config.Config, s *Server) {
+func Protocol_Init(c *config.Config, s *Server) {
 	var d database.Database
 	var p Protocol
-	var peerList PeerList
+	var peer_list PeerList
 
-	s.PeerList = &peerList
+	s.pl = &peer_list
 	d.Cf = c
 	s.cf = c
 
 	p.Dat = &d
 
-	s.Protocol = &p
+	s.Prtl = &p
 
 	d.DB_init()
 
 	go s.RestAPI()
 
-	consensus := externalip.DefaultConsensus(nil, nil)
-	// Get your IP,
-	// which is never <nil> when err is <nil>.
-	ip, err := consensus.ExternalIP()
-	if err != nil {
-		log.Println(ip)
-		return
+  	consensus := externalip.DefaultConsensus(nil, nil)
+    // Get your IP,
+    // which is never <nil> when err is <nil>.
+    ip, err := consensus.ExternalIP()
+    if err != nil {
+		log.Panic(ip)
 	}
 	s.ExternalIP = ip.String()
-	s.Node = &flatend.Node{
+	s.node = &flatend.Node{
 		PublicAddr: ":" + strconv.Itoa(c.Lport),
 		BindAddrs:  []string{":" + strconv.Itoa(c.Lport)},
 		SecretKey:  flatend.GenerateSecretKey(),
@@ -60,15 +59,16 @@ func ProtocolInit(c *config.Config, s *Server) {
 		},
 	}
 
-	defer s.Node.Shutdown()
+	defer s.node.Shutdown()
 
-	err = s.Node.Start(s.ExternalIP)
-	if err != nil {
-		log.Println("Unable to connect")
-	}
+	err = s.node.Start(s.ExternalIP)
 
 	if s.ExternalIP != "167.172.156.118:4201" {
-		go s.Node.Probe("167.172.156.118:4201")
+		go s.node.Probe("167.172.156.118:4201")
+	}
+
+	if err != nil {
+		log.Println("Unable to connect")
 	}
 
 	go s.LookForNodes()
@@ -84,11 +84,10 @@ func (s *Server) HandleCall(stream *flatend.Stream) {
 	go s.HandleConnection(req, nil)
 }
 
-func (s *Server) GetProviderFromID(id *kademlia.ID) *flatend.Provider {
-	providers := s.Node.ProvidersFor("karai-xeq")
+func (s *Server) GetProviderFromID(id  *kademlia.ID) *flatend.Provider {
+	providers := s.node.ProvidersFor("karai-xeq")
 	for _, provider := range providers {
-		if provider.GetID().Pub.String() == id.Pub.String() {
-			log.Println(provider)
+		if provider.GetID().Pub.String() == id.Pub.String(){
 			return provider
 		}
 	}
@@ -97,124 +96,113 @@ func (s *Server) GetProviderFromID(id *kademlia.ID) *flatend.Provider {
 
 func (s *Server) LookForNodes() {
 	for {
-		if s.PeerList.Count < 9 {
-			newIds := s.Node.Bootstrap()
+		if s.pl.Count < 9 {
+			new_ids := s.node.Bootstrap()
 
 			//probe new nodes
 
-			for _, peer := range newIds {
-				s.Node.Probe(peer.Host.String() + ":" + strconv.Itoa(int(peer.Port)))
+			for _, peer := range new_ids {
+				s.node.Probe(peer.Host.String() + ":" + strconv.Itoa(int(peer.Port)))
 			}
 
-			providers := s.Node.ProvidersFor("karai-xeq")
+			providers := s.node.ProvidersFor("karai-xeq")
+			//log.Println(strconv.Itoa(len(providers)))
 			for _, provider := range providers {
-				go s.SendVersion(provider)
+					go s.SendVersion(provider)
 			}
 		}
 
-		time.Sleep(time.Minute)
+		time.Sleep(30 * time.Second)
 	}
 }
 
-func (s *Server) NewDataTxFromCore(req transaction.RequestOracleData) {
-	reqString, err := json.Marshal(req)
-	if err != nil {
-		log.Println("ERROR NewDataTxFromCore: Invalid req")
-		return
-	}
+func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
+	req_string, _ := json.Marshal(req)
 
 	var txPrev string
 
-	db, connectErr := s.Protocol.Dat.Connect()
+	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM "+s.Protocol.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
+	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
+	
+	new_tx := transaction.CreateTransaction("2", txPrev, req_string, []string{}, []string{})
 
-	newTx := transaction.CreateTransaction("2", txPrev, reqString, []string{}, []string{})
-
-	if !s.Protocol.Dat.HaveTx(newTx.Hash) {
-		go s.Protocol.Dat.CommitDBTx(newTx)
-		go s.BroadCastTX(newTx)
+	if !s.Prtl.Dat.HaveTx(new_tx.Hash) {
+		go s.Prtl.Dat.CommitDBTx(new_tx)
+		go s.BroadCastTX(new_tx)
 	}
 }
 
-func (s *Server) NewConsensusTXFromCore(req transaction.RequestConsensus) {
-	reqString, err := json.Marshal(req)
-	if err != nil {
-		log.Println("ERROR NewDataTxFromCore: Invalid req")
-		return
-	}
+func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
+	req_string, _ := json.Marshal(req)
 
 	var txPrev string
 
-	db, err := s.Protocol.Dat.Connect()
-	if err != nil {
-		util.Handle("Error creating a DB connection: ", err)
-		return
-	}
+	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
+	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
-	newTx := transaction.CreateTransaction("1", txPrev, reqString, []string{}, []string{})
-	if !s.Protocol.Dat.HaveTx(newTx.Hash) {
-		go s.Protocol.Dat.CommitDBTx(newTx)
-		go s.BroadCastTX(newTx)
+	new_tx := transaction.CreateTransaction("1", txPrev, req_string, []string{}, []string{})
+	if !s.Prtl.Dat.HaveTx(new_tx.Hash) {
+		go s.Prtl.Dat.CommitDBTx(new_tx)
+		go s.BroadCastTX(new_tx)
 	}
 }
 
 func (s *Server) CreateContract(asset string, denom string) {
 	var txPrev string
-	contract := transaction.RequestContract{Asset: asset, Denom: denom}
-	jsonContract, _ := json.Marshal(contract)
+	contract := transaction.Request_Contract{asset, denom}
+	json_contract,_ := json.Marshal(contract)
 
-	db, err := s.Protocol.Dat.Connect()
-	if err != nil {
-		util.Handle("Error creating a DB connection: ", err)
-	}
+	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Protocol.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
+	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
-	tx := transaction.CreateTransaction("3", txPrev, jsonContract, []string{}, []string{})
+	tx := transaction.CreateTransaction("3", txPrev, []byte(json_contract), []string{}, []string{})
 
-	if !s.Protocol.Dat.HaveTx(tx.Hash) {
-		go s.Protocol.Dat.CommitDBTx(tx)
+	if !s.Prtl.Dat.HaveTx(tx.Hash) {
+		go s.Prtl.Dat.CommitDBTx(tx) 
 		go s.BroadCastTX(tx)
 	}
-	log.Println("Created Contract " + tx.Hash[:8] + ": " + asset + "/" + denom)
+	log.Println("Created Contract " + tx.Hash[:8]+ ": " + asset + "/" + denom)
 }
 
 /*
 
-CheckNode checks if a Node should be able to put data on the contract takes a Transaction
+CheckNode checks if a node should be able to put data on the contract takes a Transaction
 
 */
 func (s *Server) CheckNode(tx transaction.Transaction) bool {
 
-	checksOut := false
-	var hash, txData string
+	checks_out := false
+	var hash string
+	var tx_data string
 
-	db, err := s.Protocol.Dat.Connect()
-	if err != nil {
-		log.Println("ERROR CheckNode: Creating a DB connection: ", err.Error())
-		return false
-	}
+	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash, tx_data FROM "+s.Protocol.Dat.Cf.GetTableName()+" WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &txData)
+	_ = db.QueryRow("SELECT tx_hash, tx_data FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &tx_data)
 
 	if hash != "" {
-		checksOut = true
+		checks_out = true
 	}
 
-	var lastConsensus transaction.RequestConsensus
-	err = json.Unmarshal([]byte(txData), &lastConsensus)
+	var last_consensus transaction.Request_Consensus
+	err := json.Unmarshal([]byte(tx_data), &last_consensus)
 	if err != nil {
-		log.Println("Failed to Parse Last Consensus TX on check")
+		//unable to parse last consensus ? this should never happen
+		log.Println("Failed to Parse Last Consensus TX on Cehck")
 		return false
 	}
+
+	//get interface for checks [Request_Consensus, Request_Oracle_Data, Request_Contract]
 
 	result := tx.ParseInterface()
 	if result == nil {
@@ -222,26 +210,34 @@ func (s *Server) CheckNode(tx transaction.Transaction) bool {
 	}
 
 	switch v := result.(type) {
-	case transaction.RequestConsensus:
+	case transaction.Request_Consensus:
 		isFound := false
-		for _, key := range lastConsensus.Data {
+		for _, key := range last_consensus.Data {
 			if key == v.PubKey {
 				isFound = true
 				break
 			}
 		}
+
 		if !isFound {
 			return false
 		}
-		break
-	//case transaction.RequestOracleData:
-	//	// here v has type S
-	//	break
-	//case transaction.RequestContract:
-	//	break
+
+		
+
+
+		// here v has type T
+		break;
+	case transaction.Request_Oracle_Data:
+		// here v has type S
+		break;
+	case transaction.Request_Contract:
+		break;
 	default:
-		return false
+		return false;
 	}
 
-	return checksOut
+	return checks_out
 }
+
+
