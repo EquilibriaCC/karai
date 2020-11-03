@@ -5,11 +5,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/harrisonhesslink/flatend"
+	"github.com/karai/go-karai/logger"
 	"log"
 	"strconv"
 	//"io/ioutil"
 	"github.com/karai/go-karai/transaction"
-	"github.com/karai/go-karai/util"
 	// "time"
 	//"encoding/json"
 )
@@ -27,10 +27,10 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 	dec := gob.NewDecoder(&buff)
 	err := dec.Decode(&payload)
 	if err != nil {
-		log.Println("ERROR HandleGetTxs: Failed to decode payload", err)
+		logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] Failed to decode payload | %s", err))
 		return
 	}
-	log.Println(util.Rcv + " [" + command + "] Get Tx from: " + payload.Top_hash)
+	logger.Receive(" [" + command + "] Get Tx from: " + payload.Top_hash)
 	last_hash := payload.Top_hash
 	transactions := []transaction.Transaction{}
 
@@ -43,41 +43,39 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 
 			db, connectErr := s.Prtl.Dat.Connect()
 			defer db.Close()
-			util.Handle("Error creating a DB connection: ", connectErr)
-			log.Println(strconv.Itoa(len(payload.Contracts)))
+			logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] Error creating a DB connection: %s", connectErr))
+			logger.Info(strconv.Itoa(len(payload.Contracts)))
 			for key, value := range payload.Contracts {
-					//loop through to find oracle data
-					row3, err := db.Queryx("SELECT * FROM "+s.Prtl.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", key)
-					if err != nil {
-						panic(err)
-					}
-					defer row3.Close()
-					for row3.Next() {
-						var t2_tx transaction.Transaction
-						err = row3.StructScan(&t2_tx)
-						if err != nil {
-							// handle this error
-							log.Panic(err)
-						}
-						//log.Println(value)
-						log.Println(value)
-						if value == t2_tx.Hash {
-							row3.Close()
-							break
-						}
-
-						transactions = append(transactions, t2_tx)
-					}
-					err = row3.Err()
-					if err != nil {
-						log.Panic(err)
-					}
+				//loop through to find oracle data
+				row3, err := db.Queryx("SELECT * FROM "+s.Prtl.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", key)
+				if err != nil {
+					panic(err)
 				}
+				defer row3.Close()
+				for row3.Next() {
+					var t2_tx transaction.Transaction
+					err = row3.StructScan(&t2_tx)
+					if err != nil {
+						// handle this error
+						logger.Warning_log(" [HANDLEGETTXES] " + err.Error())
+					}
+					if value == t2_tx.Hash {
+						row3.Close()
+						break
+					}
+
+					transactions = append(transactions, t2_tx)
+				}
+				err = row3.Err()
+				if err != nil {
+					log.Panic(err)
+				}
+			}
 		} else {
 
 			db, connectErr := s.Prtl.Dat.Connect()
 			defer db.Close()
-			util.Handle("Error creating a DB connection: ", connectErr)
+			logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] Error creating a DB connection: %s", connectErr))
 
 			lhash := last_hash
 			//Grab all first txes on epoc 
@@ -90,11 +88,9 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 				var this_tx transaction.Transaction
 				err = rows.StructScan(&this_tx)
 				if err != nil {
-					// handle this error
-					log.Panic(err)
+					logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] %s", err.Error()))
 				}
-
-				log.Println(this_tx.Hash + " " + this_tx.Type)
+				logger.Info(this_tx.Hash + " " + this_tx.Type)
 				transactions = append(transactions, this_tx)
 
 				//loop through to find contracts
@@ -102,15 +98,14 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 				if err != nil {
 					panic(err)
 				}
-				defer row2. Close()
+				defer row2.Close()
 				for row2.Next() {
 					var t_tx transaction.Transaction
 					err = row2.StructScan(&t_tx)
 					if err != nil {
-						// handle this error
-						log.Panic(err)
+						logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] %s", err.Error()))
 					}
-					log.Println(this_tx.Hash + " " + t_tx.Type)
+					logger.Info(this_tx.Hash + " " + t_tx.Type)
 					transactions = append(transactions, t_tx)
 					//loop through to find oracle data
 					row3, err := db.Queryx("SELECT * FROM "+s.Prtl.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", t_tx.Epoc)
@@ -122,25 +117,24 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 						var t2_tx transaction.Transaction
 						err = row3.StructScan(&t2_tx)
 						if err != nil {
-							// handle this error
-							log.Panic(err)
+							logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] %s", err.Error()))
 						}
-						log.Println(this_tx.Hash + " " + t2_tx.Type)
+						logger.Info(this_tx.Hash + " " + t2_tx.Type)
 						transactions = append(transactions, t2_tx)
 					}
 					err = row3.Err()
 					if err != nil {
-						log.Panic(err)
+						logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] %s", err.Error()))
 					}
 				}
 				err = rows.Err()
 				if err != nil {
-					log.Panic(err)
+					logger.Error_log(fmt.Sprintf(" [HANDLEGETTXES] %s", err.Error()))
 				}
 
 				if lhash == this_tx.Hash {
 					rows.Close()
-					break;
+					break
 				}
 			}
 
@@ -153,16 +147,16 @@ func (s *Server) HandleGetTxes(ctx *flatend.Context, request []byte) {
 
 		var txes [][]byte
 
-		for i := len(transactions)-1; i >= 0; i-- {
-			
+		for i := len(transactions) - 1; i >= 0; i-- {
+
 			txes = append(txes, transactions[i].Serialize())
 			if (i % 100) == 0 {
 				data := GOB_BATCH_TX{txes, len(transactions)}
 				payload := GobEncode(data)
 				request := append(CmdToBytes("batchtx"), payload...)
-		
+
 				go s.SendData(ctx, request)
-				txes =  [][]byte{}
+				txes = [][]byte{}
 			}
 		}
 	}
@@ -187,7 +181,7 @@ func (s *Server) HandleGetData(ctx *flatend.Context, request []byte) {
 
 		//s.SendTx(s.GetProviderFromID(&ctx.ID), tx)
 	}
-	log.Println(util.Rcv + " [" + command + "] Data Request from: " + ctx.ID.Pub.String())
+	logger.Receive(" [" + command + "] Data Request from: " + ctx.ID.Pub.String())
 }
 
 func (s *Server) HandleBatchTx(ctx *flatend.Context, request []byte) {
@@ -207,7 +201,7 @@ func (s *Server) HandleBatchTx(ctx *flatend.Context, request []byte) {
 
 		db, connectErr := s.Prtl.Dat.Connect()
 		defer db.Close()
-		util.Handle("Error creating a DB connection: ", connectErr)
+		logger.Error_log(fmt.Sprintf(" [HANDLEBATCHTX] Error creating a DB connection | %s", connectErr))
 
 		var txPrev string
 		_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
@@ -233,7 +227,7 @@ func (s *Server) HandleBatchTx(ctx *flatend.Context, request []byte) {
 		}
 		percentage_float := float64(payload.TotalSent) / float64(s.tx_need) * 100
 		percentage_string := fmt.Sprintf("%.2f", percentage_float)
-		log.Println(util.Rcv + " [" + command + "] Received Transactions. Sync %:" + percentage_string + "[" + strconv.Itoa(payload.TotalSent) + "/" + strconv.Itoa(s.tx_need) + "]")
+		logger.Receive(" [" + command + "] Received Transactions. Sync %:" + percentage_string + "[" + strconv.Itoa(payload.TotalSent) + "/" + strconv.Itoa(s.tx_need) + "]")
 		if payload.TotalSent == s.tx_need {
 			s.tx_need = 0
 			s.sync = false
@@ -245,13 +239,13 @@ func (s *Server) GetContractMap() map[string]string {
 
 	db, connectErr := s.Prtl.Dat.Connect()
 	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
+	logger.Error_log(" [GETCONTRACTMAP] Error creating a DB connection: "+ connectErr.Error())
 
 	var Contracts map[string]string
 	Contracts = make(map[string]string)
 
 	//loop through to find oracle data
-	row3, err := db.Queryx("SELECT * FROM "+s.Prtl.Dat.Cf.GetTableName()+" WHERE tx_type='3' ORDER BY tx_time DESC")
+	row3, err := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
 	if err != nil {
 		panic(err)
 	}
@@ -260,21 +254,19 @@ func (s *Server) GetContractMap() map[string]string {
 		var this_tx transaction.Transaction
 		err = row3.StructScan(&this_tx)
 		if err != nil {
-			// handle this error
-			log.Panic(err)
-		}
+			logger.Error_log(" [GETCONTRACTMAP] Error creating a DB connection: "+ err.Error())
+			}
 		var data_prev string
-		_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", this_tx).Scan(&data_prev)
+		_ = db.QueryRow("SELECT tx_hash FROM "+s.Prtl.Dat.Cf.GetTableName()+" WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", this_tx).Scan(&data_prev)
 		Contracts[this_tx.Hash] = data_prev
 	}
 	err = row3.Err()
 	if err != nil {
-		log.Panic(err)
+		logger.Error_log(" [GETCONTRACTMAP] Error creating a DB connection: "+ err.Error())
 	}
 
 	return Contracts
 }
-
 
 func (s *Server) HandleTx(ctx *flatend.Context, request []byte) {
 	command := BytesToCmd(request[:commandLength])
@@ -290,8 +282,7 @@ func (s *Server) HandleTx(ctx *flatend.Context, request []byte) {
 	}
 	txData := payload.TX
 	tx := transaction.DeserializeTransaction(txData)
-
-	log.Println(util.Rcv + " [" + command + "] Transaction: " + tx.Hash)
+	logger.Receive(" [" + command + "] Transaction: " + tx.Hash)
 
 	if s.Prtl.Dat.HaveTx(tx.Prev) {
 		if !s.Prtl.Dat.HaveTx(tx.Hash) {
@@ -317,14 +308,13 @@ func (s *Server) HandleVersion(ctx *flatend.Context, request []byte) {
 
 		var contracts map[string]string
 		if s.sync == false {
-			go s.SendGetTxes(ctx, false, contracts )
+			go s.SendGetTxes(ctx, false, contracts)
 			s.sync = true
 			s.tx_need = payload.TxSize - s.Prtl.Dat.GetDAGSize()
 		}
 	}
 	s.sync = false
-
-	log.Println(util.Rcv + " [" + command + "] Node has Num Tx: " + strconv.Itoa(payload.TxSize))
+	logger.Receive(" [" + command + "] Node has Num Tx: " + strconv.Itoa(payload.TxSize))
 }
 
 func (s *Server) HandleConnection(req []byte, ctx *flatend.Context) {
@@ -344,4 +334,3 @@ func (s *Server) HandleConnection(req []byte, ctx *flatend.Context) {
 	}
 
 }
-

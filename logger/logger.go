@@ -20,7 +20,7 @@ var cyan = "\033[0;36m"
 var white = "\033[0;37m"
 
 func Receive(msg string) {
-	log.Println(Brightyellow + "[RECV]" + white)
+	log.Println(Brightyellow + "[RECEIVE]" + white)
 }
 
 func Send(msg string) {
@@ -29,6 +29,10 @@ func Send(msg string) {
 
 func Success_log(msg string) {
 	log.Println(Brightgreen + "[SUCCESS]" + msg + white)
+}
+
+func Info(msg string) {
+	log.Println(Brightgreen + "[INFO]" + msg + white)
 }
 
 func Error_log(msg string) {
