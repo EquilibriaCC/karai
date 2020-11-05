@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	config "github.com/karai/go-karai/configuration"
 	"github.com/karai/go-karai/network"
 	"log"
 	"os"
@@ -40,6 +41,24 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 			//menuVersion()
 		} else if strings.Compare("license", text) == 0 {
 		//	printLicense()
+		} else if strings.Compare("infologging off", text) == 0 {
+			config.InfoLogging = false
+			log.Println("Info logging turned off")
+		} else if strings.Compare("infologging on", text) == 0 {
+			config.InfoLogging = true
+			log.Println("Info logging turned on")
+		} else if strings.Compare("warninglogging off", text) == 0 {
+			config.WarningLogging = false
+			log.Println("Warning logging turned off")
+		} else if strings.Compare("warninglogging on", text) == 0 {
+			config.WarningLogging = true
+			log.Println("Warning logging turned on")
+		} else if strings.Compare("errorlogging off", text) == 0 {
+			config.ErrorLogging = false
+			log.Println("Error logging turned off")
+		} else if strings.Compare("errorlogging on", text) == 0 {
+			config.ErrorLogging = true
+			log.Println("Error logging turned on")
 		} else if strings.Compare("dag", text) == 0 {
 			count := s.Prtl.Dat.GetDAGSize()
 			log.Println("Txes: " + strconv.Itoa(count))
