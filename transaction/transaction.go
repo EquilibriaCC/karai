@@ -5,9 +5,10 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/karai/go-karai/util"
-	"golang.org/x/crypto/sha3"
 	"log"
+
+	"github.com/harrisonhesslink/pythia/util"
+	"golang.org/x/crypto/sha3"
 )
 
 func (tx *Transaction) Serialize() []byte {
@@ -26,7 +27,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 	if tx.Type == "1" {
 		var tx_data Request_Consensus
 
-		err := json.Unmarshal([]byte(tx.Data),&tx_data)
+		err := json.Unmarshal([]byte(tx.Data), &tx_data)
 		if err != nil {
 			log.Println("Unable to parse tx data")
 			return nil
@@ -35,7 +36,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		return tx_data
 	} else if tx.Type == "2" {
 		var tx_data Request_Oracle_Data
-		err := json.Unmarshal([]byte(tx.Data),&tx_data)
+		err := json.Unmarshal([]byte(tx.Data), &tx_data)
 		if err != nil {
 			log.Println("Unable to parse tx data")
 			return nil
@@ -44,7 +45,7 @@ func (tx *Transaction) ParseInterface() interface{} {
 		return tx_data
 	} else if tx.Type == "3" {
 		var tx_data Request_Contract
-		err := json.Unmarshal([]byte(tx.Data),&tx_data)
+		err := json.Unmarshal([]byte(tx.Data), &tx_data)
 		if err != nil {
 			log.Println("Unable to parse tx data")
 			return nil
@@ -68,12 +69,9 @@ func CheckConsensusTx(consensus *Request_Consensus) bool {
 	// 	return false
 	// }
 
-		return false
-
+	return false
 
 }
-
-
 
 func DeserializeTransaction(data []byte) Transaction {
 	var transaction Transaction
@@ -86,7 +84,7 @@ func DeserializeTransaction(data []byte) Transaction {
 	return transaction
 }
 
-func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc []string, txdata_on_epoc []string) Transaction {
+func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc []string, txdata_on_epoc []string, height int64) Transaction {
 	var newTx Transaction
 
 	newTx.Type = txType
@@ -111,7 +109,7 @@ func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc 
 		newTx.Time = util.UnixTimeStampNano()
 		newTx.Epoc = rct.Epoc
 		newTx.Mile = false
-
+		newTx.Height = height
 		newTx.Prnt = newTx.Epoc
 
 		newTx.Hash = hashTransaction(newTx.Time, newTx.Type, newTx.Data, newTx.Prev)
@@ -128,6 +126,7 @@ func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc 
 		}
 
 		newTx.Prev = last_epoc_tx
+		newTx.Height = height
 
 		newTx.Time = util.UnixTimeStampNano()
 		newTx.Hash = hashTransaction(newTx.Time, newTx.Type, newTx.Data, last_epoc_tx)
@@ -152,6 +151,7 @@ func CreateTransaction(txType, last_epoc_tx string, data []byte, txhash_on_epoc 
 		newTx.Epoc = newTx.Hash
 		newTx.Mile = true
 		newTx.Lead = false
+		newTx.Height = height
 		newTx.Prnt = last_epoc_tx
 		return newTx
 	}
@@ -170,4 +170,24 @@ func hashTransaction(txTime, txType, txData, txPrev string) string {
 	// txHash := hex.EncodeToString(hash[:])
 
 	return txHash
+}
+
+func CreateTrustedTransaction(prev string, trusted_data Trusted_Data) Transaction {
+	var new_tx Transaction
+	td, err := json.Marshal(trusted_data)
+	if err != nil {
+		log.Println("Unable to create string from data")
+		return Transaction{}
+	}
+	new_tx.Data = string(td)
+	new_tx.Type = "2"
+	new_tx.Time = util.UnixTimeStampNano()
+	new_tx.Prev = prev
+	new_tx.Epoc = trusted_data.TrustedData[0].Contract
+	new_tx.Subg = new_tx.Epoc
+	new_tx.Prnt = ""
+	new_tx.Lead = false
+	new_tx.Mile = false
+	new_tx.Hash = hashTransaction(new_tx.Time, new_tx.Type, new_tx.Data, prev)
+	return new_tx
 }

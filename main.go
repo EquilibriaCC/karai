@@ -1,8 +1,8 @@
 package main
 
 import (
-	config "github.com/karai/go-karai/configuration"
-	"github.com/karai/go-karai/network"
+	config "github.com/harrisonhesslink/pythia/configuration"
+	"github.com/harrisonhesslink/pythia/network"
 )
 
 // Hello Karai
@@ -17,10 +17,9 @@ func main() {
 	//createRoot()
 	//ascii()
 	var s network.Server
-	go network.Protocol_Init(&c, &s)
+	go inputHandler(&s)
+	network.ProtocolInit(&c, &s)
 	//go getDataCovid19(1000)
 	//go getDataOgre(500)
 	//go generateRandomTransactions()
-	inputHandler(&s)
-
 }

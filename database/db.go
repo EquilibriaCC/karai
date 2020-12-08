@@ -5,27 +5,39 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
+	"sync"
 	"time"
+
+	config "github.com/harrisonhesslink/pythia/configuration"
+	"github.com/harrisonhesslink/pythia/transaction"
+	"github.com/harrisonhesslink/pythia/util"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"github.com/karai/go-karai/transaction"
-	"github.com/karai/go-karai/util"
-	config "github.com/karai/go-karai/configuration"
-	"strconv"
-	"log"
 )
 
 type Database struct {
-	Cf *config.Config
-	thisSubgraph          string 
-	thisSubgraphShortName string 
-	poolInterval          int  
-	txCount               int   
+	Cf                    *config.Config
+	thisSubgraph          string
+	thisSubgraphShortName string
+	poolInterval          int
+	txCount               int
+
+	Mutex sync.Mutex
 }
 
 // Graph is a collection of transactions
 type Graph struct {
 	Transactions []transaction.Transaction `json:"transactions"`
+}
+
+func NewDataBase(c *config.Config) *Database {
+	d := new(Database)
+	d.Cf = c
+
+	d.DB_init()
+
+	return d
 }
 
 // connect will create an active DB connection
@@ -48,11 +60,10 @@ func (d *Database) CreateTables() {
 
 	tx := db.MustBegin()
 
-	q := "CREATE TABLE IF NOT EXISTS " + d.Cf.GetTableName() + "(tx_time CHAR(19) NOT NULL, tx_type CHAR(1) NOT NULL, tx_hash CHAR(128) NOT NULL, tx_data TEXT NOT NULL, tx_prev CHAR(128) NOT NULL, tx_epoc TEXT NOT NULL, tx_subg CHAR(128) NOT NULL, tx_prnt CHAR(128), tx_mile BOOLEAN NOT NULL,tx_lead BOOLEAN NOT NULL);"
+	q := "CREATE TABLE IF NOT EXISTS " + d.Cf.GetTableName() + "(tx_time CHAR(19) NOT NULL, tx_type CHAR(1) NOT NULL, tx_hash CHAR(128) NOT NULL, tx_data TEXT NOT NULL, tx_prev CHAR(128) NOT NULL, tx_epoc TEXT NOT NULL, tx_subg CHAR(128) NOT NULL, tx_prnt CHAR(128), tx_mile BOOLEAN NOT NULL,tx_lead BOOLEAN NOT NULL, tx_height INTEGER NOT NULL);"
 	tx.MustExec(q)
 	tx.Commit()
 }
-
 
 // createRoot Transaction channels start with a rootTx transaction always
 func (d Database) CreateRoot() error {
@@ -60,7 +71,7 @@ func (d Database) CreateRoot() error {
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM " + d.Cf.GetTableName() + " ORDER BY $1 DESC", "tx_time").Scan(&count)
+	err := db.QueryRow("SELECT COUNT(*) FROM "+d.Cf.GetTableName()+" ORDER BY $1 DESC", "tx_time").Scan(&count)
 	switch {
 	case err != nil:
 		util.Handle("There was a problem counting database transactions: ", err)
@@ -80,7 +91,7 @@ func (d Database) CreateRoot() error {
 			txLead := false
 			txEpoc := txHash
 			tx := db.MustBegin()
-			tx.MustExec("INSERT INTO " + d.Cf.GetTableName() + " (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", txTime, txType, txHash, txData, txPrev, txEpoc, txSubg, txPrnt, txMile, txLead)
+			tx.MustExec("INSERT INTO "+d.Cf.GetTableName()+" (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead, tx_height ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", txTime, txType, txHash, txData, txPrev, txEpoc, txSubg, txPrnt, txMile, txLead, 0)
 			tx.Commit()
 			return nil
 		} else if count > 0 {
@@ -90,52 +101,33 @@ func (d Database) CreateRoot() error {
 	return nil
 }
 
-func (d Database) CommitDBTx(tx transaction.Transaction) {
-	db, connectErr := d.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-	txn := db.MustBegin()
+func (d *Database) CommitDBTx(tx transaction.Transaction) {
 
-	txn.MustExec("INSERT INTO " + d.Cf.GetTableName() + " (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", tx.Time, tx.Type, tx.Hash, tx.Data, tx.Prev, tx.Epoc, tx.Subg, tx.Prnt, tx.Mile, tx.Lead)
-	txn.Commit()
-	d.txCount++
-}
+	if !d.HaveTx(tx.Hash) {
+		db, connectErr := d.Connect()
+		defer db.Close()
+		util.Handle("Error creating a DB connection: ", connectErr)
+		txn := db.MustBegin()
 
-func (d Database) GetPrevHash() transaction.Transaction {
-	var txData string
-	var txSubg string
-	var txPrev string
-	var txPrnt string
-	var txType string
-	var txLead bool
-
-	var txTime string
-	var txHash string
-	var txEpoc string
-	var txMile bool
-
-	db, connectErr := d.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-	_ = db.QueryRow("SELECT (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead ) FROM " + d.Cf.GetTableName() + " ORDER BY tx_time DESC LIMIT 1").Scan(&txTime, &txType, &txHash, &txData, &txPrev, &txEpoc, &txSubg, &txPrnt, &txMile, &txLead)
-
-	return transaction.Transaction{txTime, txType, txHash, txData, txPrev, txEpoc, txSubg, txPrnt, txMile, txLead}
+		txn.MustExec("INSERT INTO "+d.Cf.GetTableName()+" (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead, tx_height ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", tx.Time, tx.Type, tx.Hash, tx.Data, tx.Prev, tx.Epoc, tx.Subg, tx.Prnt, tx.Mile, tx.Lead, tx.Height)
+		txn.Commit()
+	}
 }
 
 func (d *Database) GetDAGSize() int {
-    db, connectErr := d.Connect()
-    defer db.Close()
-    util.Handle("Error creating a DB connection: ", connectErr)
-    rows, err := db.Queryx("SELECT * FROM " +  d.Cf.GetTableName())
-    if err != nil {
-        log.Println(err.Error())
-    }
-    defer rows.Close()
-    x := 0
-    for rows.Next() {
-        x++
-    }
-    return x
+	db, connectErr := d.Connect()
+	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
+	rows, err := db.Queryx("SELECT * FROM " + d.Cf.GetTableName())
+	if err != nil {
+		log.Println(err.Error())
+	}
+	defer rows.Close()
+	x := 0
+	for rows.Next() {
+		x++
+	}
+	return x
 }
 
 func (d *Database) ReturnTopHash() (string, int) {
@@ -144,77 +136,22 @@ func (d *Database) ReturnTopHash() (string, int) {
 	db, connectErr := d.Connect()
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
-	_ = db.QueryRow("SELECT tx_hash, id FROM " + d.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC LIMIT 1").Scan(&txHash, &id)
+	_ = db.QueryRow("SELECT tx_hash, id FROM "+d.Cf.GetTableName()+" WHERE tx_type='1' ORDER BY tx_time DESC LIMIT 1").Scan(&txHash, &id)
 	log.Println(txHash)
 	return txHash, id
 }
 
-func(d *Database) HaveTx(hash string) bool {
-	exists := true
-	var tx_hash string
+func (d *Database) HaveTx(hash string) bool {
 	db, connectErr := d.Connect()
 	util.Handle("Error creating a DB connection: ", connectErr)
 	defer db.Close()
-	row := db.QueryRow("SELECT tx_hash FROM " + d.Cf.GetTableName() + " WHERE tx_hash=$1", hash)
-	_ = row.Scan(&tx_hash); 
-	if tx_hash != hash {
-		exists = false
-	}
 
-    return exists
-}
-
-func (d Database) ReturnRangeOfTransactions(height int) [][]byte {
-
-	db, connectErr := d.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-
-	var txes [][]byte
-
-	rows, err := db.Query("SELECT tx_hash FROM " + d.Cf.GetTableName() + " WHERE id >" + strconv.Itoa(height))
+	var exists bool
+	err := db.QueryRow("SELECT exists(select 1 from transactions where tx_hash=$1)", hash).Scan(&exists)
 	if err != nil {
-		// handle this error better than this
-		panic(err)
+		return true
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var tx_hash string
-		err = rows.Scan(&tx_hash)
-		if err != nil {
-			// handle this error
-			panic(err)
-		}
-		
-		txes = append(txes, []byte(tx_hash))
-	}
-	// get any error encountered during iteration
-	err = rows.Err()
-	if err != nil {
-		panic(err)
-	}
-	return txes
-}
-
-func (d *Database) GetTransaction(hash []byte) transaction.Transaction {
-	var txData string
-	var txSubg string
-	var txPrev string
-	var txPrnt string
-	var txType string
-	var txLead bool
-
-	var txTime string
-	var txHash string
-	var txEpoc string
-	var txMile bool
-
-	db, connectErr := d.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-	_ = db.QueryRow("SELECT (tx_time, tx_type, tx_hash, tx_data, tx_prev, tx_epoc, tx_subg, tx_prnt, tx_mile, tx_lead) FROM " + d.Cf.GetTableName() + " WHERE tx_hash=" + string(hash) + " LIMIT 1").Scan(&txTime, &txType, &txHash, &txData, &txPrev, &txEpoc, &txSubg, &txPrnt, &txMile, &txLead)
-
-	return transaction.Transaction{txTime, txType, txHash, txData, txPrev, txEpoc, txSubg, txPrnt, txMile, txLead}
+	return exists
 }
 
 // newSubGraphTimer timer for collection interval
@@ -225,4 +162,3 @@ func (d Database) newSubGraphTimer() {
 	d.txCount = 0
 	// fmt.Printf(Brightyellow + "\nInterval concluded" + nc)
 }
-

@@ -1,243 +1,566 @@
 package network
 
 import (
-	// "encoding/hex"
-	"log"
-	//"github.com/karai/go-karai/database"
-	config "github.com/karai/go-karai/configuration"
-	"github.com/karai/go-karai/database"
-	"github.com/harrisonhesslink/flatend"
-	"strconv"
-	"github.com/glendc/go-external-ip"
-	"github.com/karai/go-karai/transaction"
-	"github.com/karai/go-karai/util"
-	"io/ioutil"
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
-	"github.com/lithdew/kademlia"
-	"encoding/json"
-	//"github.com/gorilla/websocket"
 
+	api "github.com/harrisonhesslink/pythia/api"
+	config "github.com/harrisonhesslink/pythia/configuration"
+	contract "github.com/harrisonhesslink/pythia/contract"
+	"github.com/harrisonhesslink/pythia/database"
+
+	"encoding/json"
+	"io/ioutil"
+	"strconv"
+
+	discovery "github.com/libp2p/go-libp2p-discovery"
+
+	"github.com/harrisonhesslink/pythia/transaction"
+	"github.com/harrisonhesslink/pythia/util"
+	_ "github.com/lib/pq"
+	"github.com/libp2p/go-libp2p"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	mplex "github.com/libp2p/go-libp2p-mplex"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	yamux "github.com/libp2p/go-libp2p-yamux"
+	tcp "github.com/libp2p/go-tcp-transport"
+	ws "github.com/libp2p/go-ws-transport"
+	log "github.com/sirupsen/logrus"
 )
 
-func Protocol_Init(c *config.Config, s *Server) {
-	var d database.Database
-	var p Protocol
-	var peer_list PeerList
+var (
+	GeneralChannel   = "general-channel"
+	MiningChannel    = "contract-channel"
+	FullNodesChannel = "fullnodes-channel"
+)
 
-	s.pl = &peer_list
-	d.Cf = c
-	s.cf = c
+/*
 
-	p.Dat = &d
+ProtocolInit = init all of the protocol
 
-	s.Prtl = &p
+*/
+func ProtocolInit(c *config.Config, s *Server) {
+	s.RestAPI()
 
-	d.DB_init()
-
-	go s.RestAPI()
-
-  	consensus := externalip.DefaultConsensus(nil, nil)
-    // Get your IP,
-    // which is never <nil> when err is <nil>.
-    ip, err := consensus.ExternalIP()
-    if err != nil {
-		log.Panic(ip)
-	}
-	s.ExternalIP = ip.String()
-	s.node = &flatend.Node{
-		PublicAddr: ":" + strconv.Itoa(c.Lport),
-		BindAddrs:  []string{":" + strconv.Itoa(c.Lport)},
-		SecretKey:  flatend.GenerateSecretKey(),
-		Services: map[string]flatend.Handler{
-			"karai-xeq": func(ctx *flatend.Context) {
-				req, err := ioutil.ReadAll(ctx.Body)
-				if err != nil {
-					log.Panic(err)
-				}
-				go s.HandleConnection(req, ctx)
-			},
-		},
-	}
-
-	defer s.node.Shutdown()
-
-	err = s.node.Start(s.ExternalIP)
-
-	if s.ExternalIP != "167.172.156.118:4201" {
-		go s.node.Probe("167.172.156.118:4201")
-	}
-
-	if err != nil {
-		log.Println("Unable to connect")
-	}
-
-	go s.LookForNodes()
-
-	select {}
+	StartNode("4201", true, func(net *Network) {
+		s.P2p = net
+		s.P2p.Database = database.NewDataBase(c)
+		//go jsonrpc.StartServer(cli, rpc, rpcPort, rpcAddr)
+	})
 }
 
-func (s *Server) HandleCall(stream *flatend.Stream) {
-	req, err := ioutil.ReadAll(stream.Reader)
+//NewDataTxFromCore = Go through all contracts and send data out
+func (net *Network) NewDataTxFromCore(request []string, height int64, pubkey string) {
+
+	var agg float64
+	var tx transaction.Transaction
+	var contract contract.Contract
+
+	db, connectErr := net.Database.Connect()
+	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
+
+	_ = db.QueryRowx("SELECT * FROM "+net.Database.Cf.GetTableName()+" WHERE tx_hash=$1 ORDER BY tx_time DESC", request[0]).StructScan(&tx)
+
+	err := json.Unmarshal([]byte(tx.Data), &contract)
 	if err != nil {
 		log.Panic(err)
 	}
-	go s.HandleConnection(req, nil)
-}
 
-func (s *Server) GetProviderFromID(id  *kademlia.ID) *flatend.Provider {
-	providers := s.node.ProvidersFor("karai-xeq")
-	for _, provider := range providers {
-		if provider.GetID().Pub.String() == id.Pub.String(){
-			return provider
+	data, r := api.MakeRequest(contract)
+	if r {
+		for _, v := range data {
+			f, _ := strconv.ParseFloat(v, 64)
+			agg += f
 		}
-	}
-	return nil
-}
+		agg = agg / float64(len(data))
 
-func (s *Server) LookForNodes() {
-	for {
-		if s.pl.Count < 9 {
-			new_ids := s.node.Bootstrap()
+		var oracledata transaction.OracleData
+		oracledata.Height = height
+		oracledata.Pubkey = pubkey
+		oracledata.Price = agg
+		oracledata.Contract = tx.Hash
+		oracledata.Hash = ""
+		oracledata.Signature = ""
+		sig, hash := api.CoreSign(oracledata)
 
-			//probe new nodes
+		oracledata.Hash = hash
+		oracledata.Signature = sig
 
-			for _, peer := range new_ids {
-				s.node.Probe(peer.Host.String() + ":" + strconv.Itoa(int(peer.Port)))
-			}
-
-			providers := s.node.ProvidersFor("karai-xeq")
-			//log.Println(strconv.Itoa(len(providers)))
-			for _, provider := range providers {
-					go s.SendVersion(provider)
-			}
-		}
-
-		time.Sleep(30 * time.Second)
+		net.BroadCastOracleData(oracledata)
 	}
 }
 
-func (s *Server) NewDataTxFromCore(req transaction.Request_Oracle_Data) {
+//NewConsensusTXFromCore = create v1 tx
+func (net *Network) NewConsensusTXFromCore(req transaction.NewBlock) {
 	req_string, _ := json.Marshal(req)
 
+	height := req.Height
+	if height%10 != 0 {
+		return
+	}
+
+	// go s.Prtl.Mempool.PruneHeight(height - 5)
+
 	var txPrev string
 
-	db, connectErr := s.Prtl.Dat.Connect()
+	db, connectErr := net.Database.Connect()
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='2' AND tx_epoc=$1 ORDER BY tx_time DESC", req.Epoc).Scan(&txPrev)
-	
-	new_tx := transaction.CreateTransaction("2", txPrev, req_string, []string{}, []string{})
+	_ = db.QueryRow("SELECT tx_hash FROM " + net.Database.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
-	if !s.Prtl.Dat.HaveTx(new_tx.Hash) {
-		go s.Prtl.Dat.CommitDBTx(new_tx)
-		go s.BroadCastTX(new_tx)
+	new_tx := transaction.CreateTransaction("1", txPrev, req_string, []string{}, []string{}, height)
+	if !net.Database.HaveTx(new_tx.Hash) {
+		net.Database.CommitDBTx(new_tx)
+		net.BroadCastTX(new_tx)
 	}
 }
 
-func (s *Server) NewConsensusTXFromCore(req transaction.Request_Consensus) {
-	req_string, _ := json.Marshal(req)
-
+//CreateContract make new contract uploaded fron config.json
+func (net *Network) CreateContract() {
 	var txPrev string
+	file, _ := ioutil.ReadFile("contract.json")
 
-	db, connectErr := s.Prtl.Dat.Connect()
+	data := contract.Contract{}
+
+	_ = json.Unmarshal([]byte(file), &data)
+
+	jsonContract, _ := json.Marshal(data)
+
+	db, connectErr := net.Database.Connect()
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
+	_ = db.QueryRow("SELECT tx_hash FROM " + net.Database.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
 
-	new_tx := transaction.CreateTransaction("1", txPrev, req_string, []string{}, []string{})
-	if !s.Prtl.Dat.HaveTx(new_tx.Hash) {
-		go s.Prtl.Dat.CommitDBTx(new_tx)
-		go s.BroadCastTX(new_tx)
+	tx := transaction.CreateTransaction("3", txPrev, []byte(jsonContract), []string{}, []string{}, 0)
+
+	if !net.Database.HaveTx(tx.Hash) {
+		net.Database.CommitDBTx(tx)
+		go net.BroadCastTX(tx)
 	}
-}
-
-func (s *Server) CreateContract(asset string, denom string) {
-	var txPrev string
-	contract := transaction.Request_Contract{asset, denom}
-	json_contract,_ := json.Marshal(contract)
-
-	db, connectErr := s.Prtl.Dat.Connect()
-	defer db.Close()
-	util.Handle("Error creating a DB connection: ", connectErr)
-
-	_ = db.QueryRow("SELECT tx_hash FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' ORDER BY tx_time DESC").Scan(&txPrev)
-
-	tx := transaction.CreateTransaction("3", txPrev, []byte(json_contract), []string{}, []string{})
-
-	if !s.Prtl.Dat.HaveTx(tx.Hash) {
-		go s.Prtl.Dat.CommitDBTx(tx) 
-		go s.BroadCastTX(tx)
-	}
-	log.Println("Created Contract " + tx.Hash[:8]+ ": " + asset + "/" + denom)
+	log.Info("Created Contract " + tx.Hash[:8])
 }
 
 /*
 
-CheckNode checks if a node should be able to put data on the contract takes a Transaction
-
+GetContractMap creates contract map and their last known tx
 */
-func (s *Server) CheckNode(tx transaction.Transaction) bool {
+func (net *Network) GetContractMap() map[string]string {
 
-	checks_out := false
-	var hash string
-	var tx_data string
-
-	db, connectErr := s.Prtl.Dat.Connect()
+	db, connectErr := net.Database.Connect()
 	defer db.Close()
 	util.Handle("Error creating a DB connection: ", connectErr)
 
-	_ = db.QueryRow("SELECT tx_hash, tx_data FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='1' && tx_epoc=$1 ORDER BY tx_time DESC", tx.Epoc).Scan(&hash, &tx_data)
+	var Contracts map[string]string
+	Contracts = make(map[string]string)
 
-	if hash != "" {
-		checks_out = true
-	}
-
-	var last_consensus transaction.Request_Consensus
-	err := json.Unmarshal([]byte(tx_data), &last_consensus)
+	//loop through to find oracle data
+	rows, err := db.Queryx("SELECT * FROM " + net.Database.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
 	if err != nil {
-		//unable to parse last consensus ? this should never happen
-		log.Println("Failed to Parse Last Consensus TX on Cehck")
-		return false
+		panic(err)
 	}
-
-	//get interface for checks [Request_Consensus, Request_Oracle_Data, Request_Contract]
-
-	result := tx.ParseInterface()
-	if result == nil {
-		return false
-	}
-
-	switch v := result.(type) {
-	case transaction.Request_Consensus:
-		isFound := false
-		for _, key := range last_consensus.Data {
-			if key == v.PubKey {
-				isFound = true
-				break
-			}
+	defer rows.Close()
+	for rows.Next() {
+		var this_tx transaction.Transaction
+		err = rows.StructScan(&this_tx)
+		if err != nil {
+			// handle this error
+			log.Panic(err)
 		}
-
-		if !isFound {
-			return false
-		}
-
-		
-
-
-		// here v has type T
-		break;
-	case transaction.Request_Oracle_Data:
-		// here v has type S
-		break;
-	case transaction.Request_Contract:
-		break;
-	default:
-		return false;
+		var data_prev string
+		_ = db.QueryRow("SELECT tx_hash FROM "+net.Database.Cf.GetTableName()+" WHERE tx_epoc=$1 ORDER BY tx_time DESC", this_tx.Hash).Scan(&data_prev)
+		Contracts[this_tx.Hash] = data_prev
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Panic(err)
 	}
 
-	return checks_out
+	return Contracts
 }
 
+/*
 
+CreateTrustedData creates trusted data source from all known tx
+*/
+func (net *Network) CreateTrustedData(block_height int64) {
+
+	db, connectErr := net.Database.Connect()
+	defer db.Close()
+	util.Handle("Error creating a DB connection: ", connectErr)
+
+	contract_data_map := net.Mempool.SortOracleDataMap(block_height)
+
+	filtered_data_map, trusted_data_map := FilterOracleDataMap(contract_data_map)
+
+	for _, contract_array := range filtered_data_map {
+		if len(contract_array) > 1 {
+
+			var lastTrustedTx transaction.Transaction
+			_ = db.QueryRowx("SELECT * FROM "+net.Database.Cf.GetTableName()+" WHERE tx_epoc=$1 ORDER BY tx_time DESC", contract_array[0].Contract).StructScan(&lastTrustedTx)
+			prev := lastTrustedTx.Hash
+			if prev == "" {
+				return
+			}
+
+			multi := 1.0
+
+			var contractTx transaction.Transaction
+			_ = db.QueryRowx("SELECT * FROM "+net.Database.Cf.GetTableName()+" WHERE tx_hash=$1 ORDER BY tx_time DESC", contract_array[0].Contract).StructScan(&contractTx)
+
+			contract := contract.Contract{}
+			json.Unmarshal([]byte(contractTx.Data), &contract)
+
+			if contract.ContractRef != "" {
+				var lastContractRef transaction.Transaction
+				_ = db.QueryRowx("SELECT * FROM "+net.Database.Cf.GetTableName()+" WHERE tx_epoc=$1 ORDER BY tx_time DESC", contract.ContractRef).StructScan(&lastContractRef)
+
+				if lastContractRef.Hash == "" {
+					log.Info("Unable to query last contract ref!")
+				}
+
+				td := transaction.Trusted_Data{}
+				json.Unmarshal([]byte(lastContractRef.Data), &td)
+				if td.TrustedAnswer > 0 {
+					multi = td.TrustedAnswer
+
+				} else {
+					multi = 1.0
+				}
+
+			} else {
+				multi = 1.0
+			}
+
+			price := trusted_data_map[contract_array[0].Contract] * multi
+			send := false
+			if contract.Threshold != "" {
+				s, _ := strconv.ParseFloat(contract.Threshold, 64)
+				if s > 0.0 {
+					ltd := transaction.Trusted_Data{}
+					json.Unmarshal([]byte(lastTrustedTx.Data), &ltd)
+
+					change := PercentageChange(ltd.TrustedAnswer, price)
+
+					if change >= s {
+						send = true
+					}
+				}
+			} else {
+				send = true
+			}
+
+			if send {
+				trusted_data := transaction.Trusted_Data{contract_array, price}
+
+				new_tx := transaction.CreateTrustedTransaction(prev, trusted_data)
+
+				s, _ := json.MarshalIndent(trusted_data, "", "\t")
+				log.Debug(s)
+				//sendDiscordMessage("775986994551324694", string(s))
+
+				net.Database.CommitDBTx(new_tx)
+				net.BroadCastTX(new_tx)
+			}
+		}
+	}
+}
+
+func StartNode(listenPort string, fullNode bool, callback func(*Network)) {
+	// var r io.Reader
+	// r = rand.Reader
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	prvkey, err := loadPeerKey()
+	if err != nil {
+		log.Error(err)
+	}
+	transports := libp2p.ChainOptions(
+		libp2p.Transport(tcp.NewTCPTransport),
+		libp2p.Transport(ws.New),
+	)
+
+	muxers := libp2p.ChainOptions(
+		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
+		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
+	)
+
+	if len(listenPort) == 0 {
+		listenPort = "0"
+	}
+
+	listenAddrs := libp2p.ListenAddrStrings(
+		fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", listenPort),
+		fmt.Sprintf("/ip4/0.0.0.0/tcp/%s/ws", listenPort),
+	)
+
+	host, err := libp2p.New(
+		ctx,
+		transports,
+		listenAddrs,
+		muxers,
+		libp2p.EnableNATService(),
+		libp2p.NATPortMap(),
+		libp2p.Identity(prvkey),
+		libp2p.ConnectionManager(connmgr.NewConnManager(
+			100,         // Lowwater
+			400,         // HighWater,
+			time.Minute, // GracePeriod
+		)),
+	)
+	if err != nil {
+		panic(err)
+	}
+	log.Info("Host created: ", host.ID())
+	// create a new PubSub service using the GossipSub router for general room
+	pub, err := pubsub.NewGossipSub(ctx, host)
+	if err != nil {
+		panic(err)
+	}
+
+	generalChannel, _ := JoinChannel(ctx, pub, host.ID(), GeneralChannel, true)
+	subscribe := false
+	subscribe = true
+	miningChannel, _ := JoinChannel(ctx, pub, host.ID(), MiningChannel, subscribe)
+
+	subscribe = false
+	if fullNode {
+		subscribe = true
+	}
+	fullNodesChannel, _ := JoinChannel(ctx, pub, host.ID(), FullNodesChannel, subscribe)
+
+	// setup peer discovery
+	go SetupDiscovery(ctx, host)
+
+	if err != nil {
+		panic(err)
+	}
+
+	network := &Network{
+		Host:             host,
+		GeneralChannel:   generalChannel,
+		MiningChannel:    miningChannel,
+		FullNodesChannel: fullNodesChannel,
+		Transactions:     make(chan *transaction.Transaction, 200),
+		Mempool:          NewMemPool(),
+		// Miner:            miner,
+	}
+	callback(network)
+	go network.hearbeat()
+	//go HandleEvents(network)
+	// if miner {
+	// 	// event loop for miners to constantly send a ping to fullnodes for new transactions
+	// 	// in order for it to be mined and added to the blockchain
+	// 	go network.MinersEventLoop()
+	// }
+
+	if err != nil {
+		panic(err)
+	}
+	network.handleEvents()
+}
+
+func (net *Network) hearbeat() {
+	for {
+		peers := net.GeneralChannel.ListPeers()
+		for range peers {
+			net.SendVersion()
+		}
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func HandleEvents(net *Network) {
+	// for {
+	// 	select {
+	// 	case tnx := <-net.Transactions:
+	// 		// mine := false
+	// 		//net.SendTx("", tnx)
+	// 	}
+	// }
+}
+func RequestBlocks(net *Network) error {
+	peers := net.GeneralChannel.ListPeers()
+	for range peers {
+		net.SendVersion()
+	}
+	return nil
+}
+
+func SetupDiscovery(ctx context.Context, host host.Host) {
+	// Start a DHT, for use in peer discovery. We can't just make a new DHT
+	// client because we want each peer to maintain its own local copy of the
+	// DHT, so that the bootstrapping node of the DHT can go down without
+	// inhibiting future peer discovery.
+	kademliaDHT, err := dht.New(ctx, host)
+	if err != nil {
+		panic(err)
+	}
+
+	// Bootstrap the DHT. In the default configuration, this spawns a Background
+	// thread that will refresh the peer table every five minutes.
+	log.Info("Bootstrapping the DHT")
+	if err = kademliaDHT.Bootstrap(ctx); err != nil {
+		panic(err)
+	}
+
+	// Let's connect to the bootstrap nodes first. They will tell us about the
+	// other nodes in the network.
+
+	var wg sync.WaitGroup
+	for _, peerAddr := range dht.DefaultBootstrapPeers {
+		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := host.Connect(ctx, *peerinfo); err != nil {
+				log.Error(err)
+			} else {
+				log.Debug("Connection established with bootstrap node:", *peerinfo)
+			}
+		}()
+	}
+	wg.Wait()
+
+	log.Debug("Announcing ourselves...")
+	routingDiscovery := discovery.NewRoutingDiscovery(kademliaDHT)
+	discovery.Advertise(ctx, routingDiscovery, "xeq-equilibria")
+	log.Debug("P2P Network Initialized...")
+
+	for {
+		// Now, look for others who have announced
+		// This is like your friend telling you the location to meet you.
+		log.Debug("Searching for other peers...")
+		peerChan, err := routingDiscovery.FindPeers(ctx, "xeq-equilibria")
+		if err != nil {
+			panic(err)
+		}
+
+		// Finally we open streams to the newly discovered peers.
+		for peer := range peerChan {
+			if peer.ID == host.ID() {
+				continue
+			}
+
+			host.Peerstore().ClearAddrs(peer.ID)
+			//log.Info("Found peer:", peer)
+
+			//log.Info("Connecting to:", peer)
+			err := host.Connect(context.Background(), peer)
+			if err != nil {
+				//log.Warningf("Error connecting to peer %s: %s\n", peer.ID.Pretty(), err)
+				continue
+			}
+			log.Info("Connected to:", peer)
+		}
+		time.Sleep(1 * time.Minute)
+	}
+}
+
+func loadPeerKey() (crypto.PrivKey, error) {
+	var prvkey crypto.PrivKey
+
+	if _, err := os.Stat("peerkey"); err == nil {
+		dat, _ := ioutil.ReadFile("peerkey")
+		prvkey, err = crypto.UnmarshalEd25519PrivateKey(dat)
+	} else if os.IsNotExist(err) {
+
+		key, _, err := crypto.GenerateKeyPair(
+			crypto.Ed25519,
+			-1,
+		)
+		f, err := os.Create("peerkey")
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+		key_bytes, _ := key.Raw()
+		l, err := f.Write(key_bytes)
+		if err != nil {
+			fmt.Println(err)
+			f.Close()
+			return nil, err
+		}
+		fmt.Println(l, "bytes written successfully")
+		err = f.Close()
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+	}
+	return prvkey, nil
+}
+
+// func (net *Network) MinersEventLoop() {
+// 	poolCheckTicker := time.NewTicker(time.Second)
+// 	defer poolCheckTicker.Stop()
+
+// 	for {
+// 		select {
+// 		case <-poolCheckTicker.C:
+// 			tnx := TxFromPool{net.Host.ID().Pretty(), 1}
+// 			payload := GobEncode(tnx)
+// 			request := append(CmdToBytes("gettxfrompool"), payload...)
+// 			net.FullNodesChannel.Publish("Request transaction from pool", request, "")
+// 			memoryPool.Wg.Add(1)
+// 		}
+// 	}
+// }
+
+func (net *Network) HandleStream(content *ChannelContent) {
+	// ui.displayContent(content)
+	if content.Payload != nil {
+		command := BytesToCmd(content.Payload[:commandLength])
+
+		switch command {
+		case "gettxes":
+			net.HandleGetTxes(content)
+		case "getdata":
+			net.HandleGetData(content)
+		case "tx":
+			net.HandleTx(content)
+		case "data":
+			net.HandleData(content)
+		case "batchtx":
+			net.HandleBatchTx(content)
+		case "version":
+			net.HandleSyncCall(content)
+		}
+	}
+}
+
+func (net *Network) handleEvents() {
+	var stopChan = make(chan os.Signal, 2)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	//go ui.readFromLogs(net.Blockchain.InstanceId)
+	log.Info("HOST ADDR: ", net.Host.Addrs())
+
+	for {
+		select {
+		case m := <-net.GeneralChannel.Content:
+			net.HandleStream(m)
+		case m := <-net.MiningChannel.Content:
+			net.HandleStream(m)
+
+		case m := <-net.FullNodesChannel.Content:
+			net.HandleStream(m)
+		case <-net.GeneralChannel.ctx.Done():
+			return
+		case <-stopChan:
+			return
+		}
+	}
+}

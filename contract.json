@@ -1,0 +1,25 @@
+{
+    "Asset": "BTC",
+    "Denom": "USD",
+    "variables": {
+        "gemini": [
+            "close"
+        ],
+        "binance": [
+            "lastPrice"
+        ],
+        "ftx": [
+            "result.last"
+        ]
+    },
+    "request_time": 0,
+    "ContractRef": "",
+    "Threshold": ".01",
+    "Type": "",
+    "OutputVar": "",
+    "api_url": {
+        "gemini": "https://api.gemini.com/v2/ticker/btcusd",
+        "binance": "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
+        "ftx": "https://ftx.com/api/markets/BTC/USD"
+    }
+}

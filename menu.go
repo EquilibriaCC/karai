@@ -3,18 +3,19 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/karai/go-karai/network"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/harrisonhesslink/pythia/network"
 )
 
 // inputHandler This is a basic input loop that listens for
 // a few words that correspond to functions in the app. When
 // a command isn't understood, it displays the help menu and
 // returns to listening to input.
-func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
+func inputHandler(s *network.Server /*keyCollection *ED25519Keys*/) {
 	reader := bufio.NewReader(os.Stdin)
 
 	//fmt.Printf("\n\n%v%v%v\n", white+"Type '", brightgreen+"menu", white+"' to view a list of commands")
@@ -28,21 +29,21 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSpace(text)
 		if strings.Compare("help", text) == 0 {
-		//	menu()
+			//	menu()
 		} else if strings.Compare("?", text) == 0 {
 			//menu()
 		} else if strings.Compare("peer", text) == 0 {
-		//	fmt.Printf(brightcyan + "Peer ID: ")
-		//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
+			//	fmt.Printf(brightcyan + "Peer ID: ")
+			//	fmt.Printf(cyan+"%s\n", keyCollection.publicKey)
 		} else if strings.Compare("menu", text) == 0 {
 			//menu()
 		} else if strings.Compare("version", text) == 0 {
 			//menuVersion()
 		} else if strings.Compare("license", text) == 0 {
-		//	printLicense()
+			//	printLicense()
 		} else if strings.Compare("dag", text) == 0 {
-			count := s.Prtl.Dat.GetDAGSize()
-			log.Println("Txes: " + strconv.Itoa(count))
+			count := s.P2p.Database.GetDAGSize()
+			log.Println("Transactions on Network: " + strconv.Itoa(count))
 		} else if strings.Compare("a", text) == 0 {
 			// // start := time.Now()
 			// // txint := 50
@@ -71,27 +72,10 @@ func inputHandler(s *network.Server/*keyCollection *ED25519Keys*/) {
 			// menuExit()
 		} else if strings.Compare("close", text) == 0 {
 			// menuExit()
-		} else if strings.Compare("nodes", text) == 0 {
-			// nodes := "[ "
-			// for _, node := range KnownNodes {
-			// 	nodes += node + " "
-			// }
-			// nodes += "]"
-			// log.Println(nodes)
+		} else if strings.Compare("mempool", text) == 0 {
+			//s.Prtl.Mempool.PrintMemPool()
 		} else if strings.HasPrefix(text, "create_contract ") {
-			strings.TrimPrefix(text, "create_contract ")
-			args := strings.Fields(text)
-			if args[1] == "XHV" || args[1] == "XEQ" || args[1] == "LOKI" || args[1] == "ETH" || args[1] == "DOGE" {
-				if args[2] == "BTC" {
-					go s.CreateContract(args[1], args[2])
-					} else {
-						log.Println("Pair Not Supported! BTC")
-					}
-
-			} else {
-				log.Println("Pair Not Supported! XEQ, XHV, LOKI, ETH, DOGE")
-
-			}
+			//go s.CreateContract()
 		}
 	}
 }

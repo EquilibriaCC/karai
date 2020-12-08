@@ -3,22 +3,18 @@ package network
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
-	"github.com/karai/go-karai/transaction"
-	"github.com/karai/go-karai/util"
 	"net/http"
 	"strconv"
 	"strings"
-	//"strconv"
-	"log"
-)
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	"github.com/harrisonhesslink/pythia/transaction"
+	"github.com/harrisonhesslink/pythia/util"
+
+	//"strconv"
+	log "github.com/sirupsen/logrus"
+)
 
 // restAPI() This is the main API that is activated when isCoord == true
 func (s *Server) RestAPI() {
@@ -57,18 +53,10 @@ func (s *Server) RestAPI() {
 		w.WriteHeader(http.StatusOK)
 		response, err := json.Marshal(map[string]bool{"status": true})
 		if err != nil {
-			log.Println(err.Error())
+			log.Info(err.Error())
 		}
 		_, _ = w.Write(response)
 	})
-
-	// Version
-	//api.HandleFunc("/version", returnVersion).Methods(http.MethodGet)
-
-	// Stats
-	// api.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
-	// 	returnStatsWeb(w, r, keyCollection)
-	// }).Methods(http.MethodGet)
 
 	api.HandleFunc("/transactions/{type}/{txs}", func(w http.ResponseWriter, r *http.Request) {
 		var txQuery string
@@ -91,7 +79,7 @@ func (s *Server) RestAPI() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		db, err := s.Prtl.Dat.Connect()
+		db, err := s.P2p.Database.Connect()
 		if err != nil {
 			res, _ := json.Marshal(map[string]bool{"status": false})
 			w.WriteHeader(http.StatusBadRequest)
@@ -113,7 +101,7 @@ func (s *Server) RestAPI() {
 		}
 
 		var transactions []transaction.Transaction
-		rows, _ := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + queryExtension + order)
+		rows, _ := db.Queryx("SELECT * FROM " + s.P2p.Database.Cf.GetTableName() + queryExtension + order)
 		defer rows.Close()
 		x := 1
 		for rows.Next() {
@@ -132,30 +120,10 @@ func (s *Server) RestAPI() {
 		_, _ = w.Write(txs)
 	}).Methods("GET")
 
-	api.HandleFunc("/new_tx", func(w http.ResponseWriter, r *http.Request) {
-		if s.sync == false {
-
-			var req transaction.Request_Oracle_Data
-			err := json.NewDecoder(r.Body).Decode(&req)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			log.Println("We are data boy")
-			log.Println(req)
-
-			if (req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && req.Data != "" && req.Height != "" && req.Source != "" && req.Epoc != "") {
-				go s.NewDataTxFromCore(req)
-			}
-		}
-		r.Body.Close()
-	}).Methods("POST")
-
 	api.HandleFunc("/get_contracts", func(w http.ResponseWriter, r *http.Request) {
-		if s.sync == false {
+		if s.Prtl.Sync.Connected {
 
-			db, connectErr := s.Prtl.Dat.Connect()
+			db, connectErr := s.P2p.Database.Connect()
 			defer db.Close()
 			util.Handle("Error creating a DB connection: ", connectErr)
 
@@ -164,7 +132,7 @@ func (s *Server) RestAPI() {
 			// reportRequest("transactions/"+hash, w, r)
 			transactions := []transaction.Transaction{}
 
-			rows, err := db.Queryx("SELECT * FROM " + s.Prtl.Dat.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
+			rows, err := db.Queryx("SELECT * FROM " + s.P2p.Database.Cf.GetTableName() + " WHERE tx_type='3' ORDER BY tx_time DESC")
 			if err != nil {
 				panic(err)
 			}
@@ -195,27 +163,35 @@ func (s *Server) RestAPI() {
 
 	}).Methods("GET")
 
-	api.HandleFunc("/new_consensus_tx", func(w http.ResponseWriter, r *http.Request) {
-		if s.sync == false {
-			var req transaction.Request_Consensus
-			// Try to decode the request body into the struct. If there is an error,
-			// respond to the client with the error message and a 400 status code.
-			err := json.NewDecoder(r.Body).Decode(&req)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+	api.HandleFunc("/new_block", func(w http.ResponseWriter, r *http.Request) {
 
-			log.Println("We are consensus man")
+		var req transaction.NewBlock
 
-			if (req.PubKey != "" && req.Signature != "" && req.Hash != "" && req.Task != "" && len(req.Data) > 0 && req.Height != "") {
-				go s.NewConsensusTXFromCore(req)
+		// Try to decode the request body into the struct. If there is an error,
+		// respond to the client with the error message and a 400 status code.
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		//handleSwaps(req.Swaps)
+		if req.Pubkey == req.Nodes[len(req.Nodes)-1] {
+			s.P2p.CreateTrustedData(req.Height - 1)
+		}
+
+		if req.Pubkey != "" && len(req.Nodes) > 0 && req.Height != 0 {
+			if req.Leader {
+				s.P2p.NewConsensusTXFromCore(req)
+			} else {
+				for _, tx := range req.Requests {
+					s.P2p.NewDataTxFromCore(tx, req.Height, req.Pubkey)
+				}
 			}
 		}
 		r.Body.Close()
 	}).Methods("POST")
 
 	// Serve via HTTP
-	log.Println("TX API listening on [::]:4203")
-	http.ListenAndServe(":4203", handlers.CORS(headersCORS, originsCORS, methodsCORS)(api))
+	log.Info("TX API listening on [::]:4203")
+	go http.ListenAndServe(":4203", handlers.CORS(headersCORS, originsCORS, methodsCORS)(api))
 }

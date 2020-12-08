@@ -2,7 +2,9 @@ package configuration
 
 import (
 	"encoding/json"
+
 	"github.com/gorilla/websocket"
+
 	//"io/ioutil"
 	"log"
 	"os"
@@ -47,7 +49,7 @@ const (
 	appDev         = "The TurtleCoin Developers"
 	appDescription = appName + " is the Go implementation of the Karai network spec. Karai is a universal blockchain scaling solution for distributed applications."
 	appLicense     = "https://choosealicense.com/licenses/mit/"
-	appRepository  = "https://github.com/karai/go-karai"
+	appRepository  = "https://github.com/harrisonhesslink/pythia"
 	appURL         = "https://karai.io"
 )
 

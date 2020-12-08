@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"time"
-	config"github.com/karai/go-karai/configuration"
+
+	config "github.com/harrisonhesslink/pythia/configuration"
 )
 
 // ascii Splash logo. We used to have a package for this
@@ -100,7 +102,7 @@ func createDirIfItDontExist(dir string) {
 
 // checkDirs Check if directory exists
 func checkDirs(c *config.Config) {
-	fmt.Printf("\n" + c.GetConfigDir());
+	fmt.Printf("\n" + c.GetConfigDir())
 	createDirIfItDontExist(c.GetConfigDir())
 	createDirIfItDontExist(c.Getp2pConfigDir())
 	createDirIfItDontExist(c.Getp2pWhitelistDir())
@@ -213,4 +215,21 @@ func cleanData(c *config.Config) {
 		fmt.Printf(Brightyellow+"\nCerts clear: %s"+white, Brightgreen+"✔️")
 
 	}
+}
+
+//move to maybe logger package
+func Success_log(msg string) {
+	log.Println(Brightgreen + msg + white)
+}
+
+func Error_log(msg string) {
+	log.Println(Brightred + msg + white)
+}
+
+func Warning_log(msg string) {
+	log.Println(Brightyellow + msg + white)
+}
+
+func Success_log_array(msg string) {
+	log.Print(Brightgreen + msg + white)
 }
